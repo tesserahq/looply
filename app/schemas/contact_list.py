@@ -3,6 +3,8 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
+from app.schemas.contact import Contact
+
 
 class ContactListBase(BaseModel):
     """Base contact list model containing common contact list attributes."""
@@ -65,3 +67,32 @@ class ContactList(ContactListInDB):
     """Schema for contact list data returned in API responses. Inherits all fields from ContactListInDB."""
 
     pass
+
+
+class AddMembersRequest(BaseModel):
+    """Schema for adding members to a contact list."""
+
+    contact_ids: list[UUID]
+    """List of contact IDs to add to the list."""
+
+
+class MemberCountResponse(BaseModel):
+    """Schema for contact list member count response."""
+
+    contact_list_id: UUID
+    """ID of the contact list."""
+
+    count: int
+    """Number of active members in the list."""
+
+
+class ListMembersResponse(BaseModel):
+    """Schema for listing contact list members."""
+
+    contact_list_id: UUID
+    """ID of the contact list."""
+
+    members: list[Contact]
+    """List of contacts in the contact list."""
+
+    model_config = {"from_attributes": True}

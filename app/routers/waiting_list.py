@@ -15,6 +15,7 @@ from app.schemas.waiting_list import (
     WaitingListMemberCountResponse,
 )
 from app.services.waiting_list_service import WaitingListService
+from app.constants.waiting_list import WaitingListMemberStatus
 from app.schemas.user import User
 from tessera_sdk.utils.auth import get_current_user
 
@@ -23,6 +24,21 @@ router = APIRouter(
     tags=["waiting-lists"],
     responses={404: {"description": "Not found"}},
 )
+
+
+@router.get("/member-statuses")
+def list_member_statuses():
+    """Get all available member statuses for waiting lists."""
+    statuses = WaitingListMemberStatus.values()
+    status_details = WaitingListMemberStatus.get_all_with_descriptions()
+
+    return {
+        "items": status_details,
+        "size": len(statuses),
+        "page": 1,
+        "pages": 1,
+        "total": len(statuses),
+    }
 
 
 @router.post("", response_model=WaitingList, status_code=status.HTTP_201_CREATED)

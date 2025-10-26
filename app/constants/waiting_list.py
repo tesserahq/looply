@@ -37,6 +37,47 @@ class WaitingListMemberStatus(str, Enum):
     """Member has been cancelled"""
 
     @classmethod
+    def get_description(cls, status: "WaitingListMemberStatus") -> str:
+        """
+        Get the description for a specific status.
+
+        Args:
+            status: The status to get description for
+
+        Returns:
+            str: Description of the status
+        """
+        descriptions = {
+            cls.PENDING: "Member is pending approval or notification",
+            cls.APPROVED: "Member has been approved",
+            cls.REJECTED: "Member has been rejected",
+            cls.NOTIFIED: "Member has been notified",
+            cls.ACCEPTED: "Member has accepted their spot",
+            cls.DECLINED: "Member has declined their spot",
+            cls.ACTIVE: "Member is currently active",
+            cls.INACTIVE: "Member is currently inactive",
+            cls.CANCELLED: "Member has been cancelled",
+        }
+        return descriptions.get(status, "")
+
+    @classmethod
+    def get_all_with_descriptions(cls) -> list[dict]:
+        """
+        Get all statuses with their values, labels, and descriptions.
+
+        Returns:
+            list[dict]: List of dictionaries with value, label, and description
+        """
+        return [
+            {
+                "value": status.value,
+                "label": status.value.title(),
+                "description": cls.get_description(status),
+            }
+            for status in cls
+        ]
+
+    @classmethod
     def values(cls) -> list[str]:
         """
         Get all status values as a list.

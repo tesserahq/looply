@@ -217,6 +217,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Drop tables in reverse order
+    op.drop_table("waiting_list_members")
+    op.drop_table("waiting_lists")
     op.drop_table("contact_list_members")
     op.drop_table("contact_lists")
     op.drop_table("contacts")

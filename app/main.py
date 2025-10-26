@@ -11,6 +11,7 @@ from fastapi_pagination import add_pagination
 from .routers import (
     user,
     contact,
+    contact_list,
 )
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from app.telemetry import setup_tracing
@@ -80,6 +81,7 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
 
     app.include_router(user.router)
     app.include_router(contact.router)
+    app.include_router(contact_list.router)
 
     register_exception_handlers(app)
 

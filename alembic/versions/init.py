@@ -173,6 +173,11 @@ def upgrade() -> None:
             ["contact_list_id"], ["contact_lists.id"], ondelete="CASCADE"
         ),
         sa.ForeignKeyConstraint(["contact_id"], ["contacts.id"], ondelete="CASCADE"),
+        sa.UniqueConstraint(
+            "contact_list_id",
+            "contact_id",
+            name="uq_contact_list_members_contact_list_id_contact_id",
+        ),
     )
 
 

@@ -16,8 +16,6 @@ from app.schemas.contact_list import (
     ListMembersResponse,
 )
 from app.services.contact_list_service import ContactListService
-from app.schemas.contact import Contact
-from app.models.contact_list import ContactList as ContactListModel
 from app.schemas.user import User
 from tessera_sdk.utils.auth import get_current_user
 

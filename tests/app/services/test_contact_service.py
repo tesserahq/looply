@@ -2,7 +2,6 @@ import pytest
 from uuid import uuid4
 from datetime import datetime
 from sqlalchemy.orm import Session
-from app.models.contact import Contact
 from app.schemas.contact import ContactCreate, ContactUpdate
 from app.services.contact_service import ContactService
 

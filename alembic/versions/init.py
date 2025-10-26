@@ -180,6 +180,40 @@ def upgrade() -> None:
         ),
     )
 
+    op.create_table(
+        "waiting_lists",
+        sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("name", sa.String(), nullable=False),
+        sa.Column("description", sa.String(), nullable=True),
+        sa.Column("created_by_id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(["created_by_id"], ["users.id"], ondelete="CASCADE"),
+    )
+
+    op.create_table(
+        "waiting_list_members",
+        sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("waiting_list_id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(), nullable=True),
+        sa.Column("contact_id", sa.UUID(as_uuid=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(
+            ["waiting_list_id"], ["waiting_lists.id"], ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(["contact_id"], ["contacts.id"], ondelete="CASCADE"),
+        sa.UniqueConstraint(
+            "waiting_list_id",
+            "contact_id",
+            name="uq_waiting_list_members_waiting_list_id_contact_id",
+        ),
+    )
+
 
 def downgrade() -> None:
     # Drop tables in reverse order

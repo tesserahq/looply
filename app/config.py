@@ -100,7 +100,7 @@ class Settings(BaseSettings):
             raise ValueError("Database URL is not set.")
         return make_url(self.database_url)
 
-    class Config:
+    class ConfigDict:
         env_file = ".env"
         env_file_encoding = "utf-8"
         extra = "allow"  # Allow extra environment variables

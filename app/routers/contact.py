@@ -58,6 +58,30 @@ def list_contacts(db: Session = Depends(get_db)):
     return paginate(db, contact_service.get_contacts_query())
 
 
+@router.get("/search", response_model=Page[Contact])
+def search_contacts(
+    q: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Search contacts by text using PostgreSQL full-text search.
+
+    Args:
+        q: The search query term
+
+    Returns:
+        Page[Contact]: Paginated list of contacts matching the search term
+    """
+    if not q:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Search query parameter 'q' is required",
+        )
+
+    contact_service = ContactService(db)
+    return paginate(db, contact_service.get_search_text_query(q))
+
+
 @router.get("/{contact_id}", response_model=Contact)
 def get_contact(contact_id: UUID, db: Session = Depends(get_db)):
     """Get a contact by ID."""

@@ -1,6 +1,7 @@
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.models.contact import Contact
 from app.schemas.contact import ContactCreate, ContactUpdate
 from app.services.soft_delete_service import SoftDeleteService
@@ -196,6 +197,50 @@ class ContactService(SoftDeleteService[Contact]):
             List[Contact]: List of contacts matching the search term
         """
         return self.db.query(Contact).filter(Contact.fts.match(search_term)).all()
+
+    def search_text(
+        self, search_term: str, skip: int = 0, limit: int = 100
+    ) -> List[Contact]:
+        """
+        Search contacts by text using PostgreSQL full-text search (fts column).
+
+        Args:
+            search_term: The text to search for
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+
+        Returns:
+            List[Contact]: List of contacts matching the search term
+        """
+        # Use plainto_tsquery to convert the search term to a proper tsquery
+        # This handles plain text and converts it to a tsquery that PostgreSQL can understand
+        tsquery = func.plainto_tsquery("simple_unaccent", search_term)
+        return (
+            self.db.query(Contact)
+            .filter(Contact.fts.op("@@")(tsquery))
+            .order_by(Contact.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def get_search_text_query(self, search_term: str):
+        """
+        Get a query for searching contacts by text using PostgreSQL full-text search.
+        This is useful for pagination with fastapi-pagination.
+
+        Args:
+            search_term: The text to search for
+
+        Returns:
+            Query: SQLAlchemy query object for search results
+        """
+        tsquery = func.plainto_tsquery("simple_unaccent", search_term)
+        return (
+            self.db.query(Contact)
+            .filter(Contact.fts.op("@@")(tsquery))
+            .order_by(Contact.created_at.desc())
+        )
 
     def restore_contact(self, contact_id: UUID) -> bool:
         """Restore a soft-deleted contact by setting deleted_at to None."""

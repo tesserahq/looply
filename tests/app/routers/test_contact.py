@@ -245,3 +245,112 @@ class TestContactRouterPagination:
             assert "size" in data
             assert data["page"] == 1
             assert data["size"] == 1
+
+
+class TestContactRouterSearch:
+    """Test class for contact search functionality."""
+
+    def test_search_contacts(self, client, test_contact):
+        """Test GET /contacts/search endpoint."""
+        response = client.get("/contacts/search", params={"q": test_contact.first_name})
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "items" in data
+        assert "total" in data
+        assert "page" in data
+        assert "size" in data
+        assert "pages" in data
+        assert len(data["items"]) >= 1
+        # Verify the search result includes the expected contact
+        contact_ids = [item["id"] for item in data["items"]]
+        assert str(test_contact.id) in contact_ids
+
+    def test_search_contacts_last_name(self, client, test_contact):
+        """Test GET /contacts/search endpoint with last name."""
+        response = client.get("/contacts/search", params={"q": test_contact.last_name})
+        assert response.status_code == 200
+
+        data = response.json()
+        assert len(data["items"]) >= 1
+        contact_ids = [item["id"] for item in data["items"]]
+        assert str(test_contact.id) in contact_ids
+
+    def test_search_contacts_email(self, client, test_contact):
+        """Test GET /contacts/search endpoint with email."""
+        if test_contact.email:
+            response = client.get("/contacts/search", params={"q": test_contact.email})
+            assert response.status_code == 200
+
+            data = response.json()
+            assert len(data["items"]) >= 1
+            contact_ids = [item["id"] for item in data["items"]]
+            assert str(test_contact.id) in contact_ids
+
+    def test_search_contacts_company(self, client, test_contact):
+        """Test GET /contacts/search endpoint with company."""
+        if test_contact.company:
+            response = client.get(
+                "/contacts/search", params={"q": test_contact.company}
+            )
+            assert response.status_code == 200
+
+            data = response.json()
+            assert len(data["items"]) >= 1
+            contact_ids = [item["id"] for item in data["items"]]
+            assert str(test_contact.id) in contact_ids
+
+    def test_search_contacts_no_results(self, client):
+        """Test GET /contacts/search with no matches."""
+        response = client.get(
+            "/contacts/search", params={"q": "nonexistentsearchterm12345"}
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["total"] == 0
+        assert len(data["items"]) == 0
+
+    def test_search_contacts_missing_query(self, client):
+        """Test GET /contacts/search without query parameter."""
+        response = client.get("/contacts/search")
+        # FastAPI will return 422 (unprocessable entity) for missing required parameter
+        assert response.status_code == 422
+
+    def test_search_contacts_empty_query(self, client):
+        """Test GET /contacts/search with empty query."""
+        response = client.get("/contacts/search", params={"q": ""})
+        assert response.status_code == 400
+        assert "required" in response.json()["detail"].lower()
+
+    def test_search_contacts_pagination(self, client, test_contact, setup_contact):
+        """Test GET /contacts/search with pagination."""
+        response = client.get(
+            "/contacts/search",
+            params={"q": test_contact.first_name, "page": 1, "size": 1},
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["page"] == 1
+        assert data["size"] == 1
+        assert len(data["items"]) <= 1
+
+    def test_search_contacts_case_insensitive(self, client, test_contact):
+        """Test that search is case insensitive."""
+        # Search with lowercase
+        response_lower = client.get(
+            "/contacts/search", params={"q": test_contact.first_name.lower()}
+        )
+        assert response_lower.status_code == 200
+
+        # Search with uppercase
+        response_upper = client.get(
+            "/contacts/search", params={"q": test_contact.first_name.upper()}
+        )
+        assert response_upper.status_code == 200
+
+        # Both should return the same results
+        data_lower = response_lower.json()
+        data_upper = response_upper.json()
+        assert data_lower["total"] == data_upper["total"]

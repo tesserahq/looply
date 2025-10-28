@@ -385,3 +385,60 @@ def test_get_contacts_deleted_after(db: Session, test_contact):
     deleted_contacts = contact_service.get_contacts_deleted_after(past_date)
     assert len(deleted_contacts) >= 1
     assert any(c.id == test_contact.id for c in deleted_contacts)
+
+
+def test_search_text(db: Session, test_contact):
+    """Test searching contacts by text across multiple fields."""
+    contact_service = ContactService(db)
+
+    # Search by first name
+    results = contact_service.search_text(test_contact.first_name)
+    assert len(results) >= 1
+    assert any(c.id == test_contact.id for c in results)
+
+    # Search by last name
+    results = contact_service.search_text(test_contact.last_name)
+    assert len(results) >= 1
+    assert any(c.id == test_contact.id for c in results)
+
+    # Search by company
+    if test_contact.company:
+        results = contact_service.search_text(test_contact.company)
+        assert len(results) >= 1
+        assert any(c.id == test_contact.id for c in results)
+
+    # Search by email
+    if test_contact.email:
+        results = contact_service.search_text(test_contact.email)
+        assert len(results) >= 1
+        assert any(c.id == test_contact.id for c in results)
+
+    # Search with no match
+    results = contact_service.search_text("nonexistentsearchterm12345")
+    assert len(results) == 0
+
+
+def test_search_text_with_pagination(db: Session, test_contact):
+    """Test searching contacts by text with pagination."""
+    contact_service = ContactService(db)
+
+    # Search with skip and limit
+    results = contact_service.search_text(test_contact.first_name, skip=0, limit=10)
+    assert isinstance(results, list)
+    assert len(results) <= 10
+
+
+def test_search_text_case_insensitive(db: Session, test_contact):
+    """Test that text search is case-insensitive."""
+    contact_service = ContactService(db)
+
+    # Search with lowercase
+    results_lower = contact_service.search_text(test_contact.first_name.lower())
+
+    # Search with uppercase
+    results_upper = contact_service.search_text(test_contact.first_name.upper())
+
+    # Both should return the same results
+    assert len(results_lower) == len(results_upper)
+    assert any(c.id == test_contact.id for c in results_lower)
+    assert any(c.id == test_contact.id for c in results_upper)

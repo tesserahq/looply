@@ -2,6 +2,9 @@ from traceback import format_exc
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from app.exceptions.resource_not_found_error import ResourceNotFoundError
+from app.exceptions.duplicate_contact_list_member_error import (
+    DuplicateContactListMemberError,
+)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -9,6 +12,15 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def resource_not_found_handler(request: Request, exc: ResourceNotFoundError):
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": str(exc)},
+        )
+
+    @app.exception_handler(DuplicateContactListMemberError)
+    async def duplicate_contact_list_member_handler(
+        request: Request, exc: DuplicateContactListMemberError
+    ):
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={"detail": str(exc)},
         )
 

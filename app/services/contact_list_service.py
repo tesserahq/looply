@@ -1,6 +1,12 @@
 from typing import List, Optional
 from uuid import UUID
+
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+from app.exceptions.duplicate_contact_list_member_error import (
+    DuplicateContactListMemberError,
+)
 from app.models.contact_list import ContactList
 from app.models.contact_list_member import ContactListMember
 from app.models.contact import Contact
@@ -206,14 +212,27 @@ class ContactListService(SoftDeleteService[ContactList]):
         )
 
         if existing_member:
-            return None
+            if existing_member.deleted_at is None:
+                raise DuplicateContactListMemberError(contact_list_id, contact_id)
+
+            existing_member.deleted_at = None
+            self.db.commit()
+            self.db.refresh(existing_member)
+            return existing_member
 
         # Create new membership
         member = ContactListMember(
             contact_list_id=contact_list_id, contact_id=contact_id
         )
         self.db.add(member)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", "")
+            if constraint == "uq_contact_list_members_contact_list_id_contact_id":
+                raise DuplicateContactListMemberError(contact_list_id, contact_id) from exc
+            raise
         self.db.refresh(member)
         return member
 

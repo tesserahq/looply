@@ -12,6 +12,7 @@ from .routers import (
     user,
     contact,
     contact_list,
+    contact_interaction,
     waiting_list,
 )
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -82,6 +83,8 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
     app.include_router(user.router)
     app.include_router(contact.router)
     app.include_router(contact_list.router)
+    app.include_router(contact_interaction.router)
+    app.include_router(contact_interaction.nested_router)
     app.include_router(waiting_list.router)
 
     register_exception_handlers(app)

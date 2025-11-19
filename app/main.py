@@ -70,8 +70,6 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
         if auth_middleware:
             app.add_middleware(auth_middleware)
 
-    app.add_middleware(DBSessionMiddleware)
-
     # TODO: Restrict this to the allowed origins
     app.add_middleware(
         CORSMiddleware,

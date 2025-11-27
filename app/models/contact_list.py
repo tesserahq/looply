@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.mixins import TimestampMixin, SoftDeleteMixin
-from sqlalchemy import Column, ForeignKey, String
+from sqlalchemy import Boolean, Column, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
@@ -20,6 +20,7 @@ class ContactList(Base, TimestampMixin, SoftDeleteMixin):
     created_by_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
     # Note: You might want to add relationships to contacts if needed

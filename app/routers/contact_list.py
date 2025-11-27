@@ -49,6 +49,13 @@ def list_contact_lists(db: Session = Depends(get_db)):
     return paginate(db, contact_list_service.get_contact_lists_query())
 
 
+@router.get("/public", response_model=Page[ContactList])
+def list_public_contact_lists(db: Session = Depends(get_db)):
+    """List all public contact lists with pagination."""
+    contact_list_service = ContactListService(db)
+    return paginate(db, contact_list_service.get_public_contact_lists_query())
+
+
 @router.get("/{contact_list_id}", response_model=ContactList)
 def get_contact_list(contact_list_id: UUID, db: Session = Depends(get_db)):
     """Get a contact list by ID."""

@@ -43,6 +43,42 @@ def test_list_contact_lists(client_test_user: TestClient, test_contact_list, fak
     assert len(data["items"]) > 0
 
 
+def test_list_public_contact_lists(
+    client_test_user: TestClient, public_contact_list, test_contact_list
+):
+    """Test listing only public contact lists."""
+    response = client_test_user.get("/contact-lists/public")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "items" in data
+    assert "total" in data
+    assert len(data["items"]) > 0
+
+    # Verify all returned lists are public
+    for item in data["items"]:
+        assert item["is_public"] is True
+
+    # Verify the public contact list is included
+    item_ids = [item["id"] for item in data["items"]]
+    assert str(public_contact_list.id) in item_ids
+
+    # Verify the private contact list is NOT included
+    assert str(test_contact_list.id) not in item_ids
+
+
+def test_list_public_contact_lists_empty(client_test_user: TestClient):
+    """Test listing public contact lists when none exist."""
+    response = client_test_user.get("/contact-lists/public")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "items" in data
+    assert "total" in data
+    assert data["total"] == 0
+    assert len(data["items"]) == 0
+
+
 def test_get_contact_list(client_test_user: TestClient, test_contact_list):
     """Test getting a contact list by ID."""
     response = client_test_user.get(f"/contact-lists/{test_contact_list.id}")

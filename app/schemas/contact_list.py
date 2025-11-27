@@ -18,6 +18,9 @@ class ContactListBase(BaseModel):
     description: Optional[str] = None
     """Description of the contact list. Optional field."""
 
+    is_public: bool = False
+    """Whether the contact list is public. Defaults to False."""
+
     created_by_id: UUID
     """ID of the user who created this contact list. Required field."""
 
@@ -37,6 +40,9 @@ class ContactListCreateRequest(BaseModel):
     description: Optional[str] = None
     """Description of the contact list. Optional field."""
 
+    is_public: bool = False
+    """Whether the contact list is public. Defaults to False."""
+
 
 class ContactListUpdate(BaseModel):
     """Schema for updating an existing contact list. All fields are optional."""
@@ -46,6 +52,8 @@ class ContactListUpdate(BaseModel):
 
     description: Optional[str] = None
     """Updated description."""
+
+    is_public: Optional[bool] = None
 
 
 class ContactListInDB(ContactListBase):

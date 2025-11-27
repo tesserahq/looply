@@ -67,3 +67,21 @@ def contact_list_with_minimal_data(db, faker, test_user):
     db.refresh(contact_list)
 
     return contact_list
+
+
+@pytest.fixture(scope="function")
+def public_contact_list(db, faker, test_user):
+    """Create a public contact list for use in tests."""
+    contact_list_data = {
+        "name": faker.company(),
+        "description": faker.text(max_nb_chars=200),
+        "created_by_id": test_user.id,
+        "is_public": True,
+    }
+
+    contact_list = ContactList(**contact_list_data)
+    db.add(contact_list)
+    db.commit()
+    db.refresh(contact_list)
+
+    return contact_list

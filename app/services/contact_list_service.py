@@ -58,6 +58,20 @@ class ContactListService(SoftDeleteService[ContactList]):
         """
         return self.db.query(ContactList).order_by(ContactList.created_at.desc())
 
+    def get_public_contact_lists_query(self):
+        """
+        Get a query for all public contact lists.
+        This is useful for pagination with fastapi-pagination.
+
+        Returns:
+            Query: SQLAlchemy query object for public contact lists
+        """
+        return (
+            self.db.query(ContactList)
+            .filter(ContactList.is_public == True)
+            .order_by(ContactList.created_at.desc())
+        )
+
     def get_contact_lists_by_creator(
         self, created_by_id: UUID, skip: int = 0, limit: int = 100
     ) -> List[ContactList]:

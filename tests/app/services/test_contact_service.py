@@ -38,7 +38,7 @@ def minimal_contact_data(faker, test_user):
     }
 
 
-def test_create_contact(db: Session, sample_contact_data):
+def test_create_contact(db, sample_contact_data):
     """Test creating a contact with full data."""
     contact_create = ContactCreate(**sample_contact_data)
     contact = ContactService(db).create_contact(contact_create)
@@ -66,7 +66,7 @@ def test_create_contact(db: Session, sample_contact_data):
     assert contact.updated_at is not None
 
 
-def test_create_contact_minimal_data(db: Session, minimal_contact_data):
+def test_create_contact_minimal_data(db, minimal_contact_data):
     """Test creating a contact with minimal required data."""
     contact_create = ContactCreate(**minimal_contact_data)
     contact = ContactService(db).create_contact(contact_create)
@@ -83,7 +83,7 @@ def test_create_contact_minimal_data(db: Session, minimal_contact_data):
     assert contact.updated_at is not None
 
 
-def test_get_contact(db: Session, test_contact):
+def test_get_contact(db, test_contact):
     """Test retrieving a contact by ID."""
     retrieved_contact = ContactService(db).get_contact(test_contact.id)
 
@@ -94,7 +94,7 @@ def test_get_contact(db: Session, test_contact):
     assert retrieved_contact.email == test_contact.email
 
 
-def test_get_contact_by_email(db: Session, test_contact):
+def test_get_contact_by_email(db, test_contact):
     """Test retrieving a contact by email."""
     retrieved_contact = ContactService(db).get_contact_by_email(test_contact.email)
 
@@ -104,7 +104,7 @@ def test_get_contact_by_email(db: Session, test_contact):
     assert retrieved_contact.email == test_contact.email
 
 
-def test_get_contact_by_phone(db: Session, test_contact):
+def test_get_contact_by_phone(db, test_contact):
     """Test retrieving a contact by phone."""
     retrieved_contact = ContactService(db).get_contact_by_phone(test_contact.phone)
 
@@ -114,7 +114,7 @@ def test_get_contact_by_phone(db: Session, test_contact):
     assert retrieved_contact.phone == test_contact.phone
 
 
-def test_get_contacts(db: Session, test_contact):
+def test_get_contacts(db, test_contact):
     """Test retrieving all contacts with pagination."""
     contacts = ContactService(db).get_contacts()
 
@@ -123,7 +123,7 @@ def test_get_contacts(db: Session, test_contact):
     assert any(c.id == test_contact.id for c in contacts)
 
 
-def test_get_contacts_by_creator(db: Session, test_contact):
+def test_get_contacts_by_creator(db, test_contact):
     """Test retrieving contacts by creator."""
     contacts = ContactService(db).get_contacts_by_creator(test_contact.created_by_id)
 
@@ -133,7 +133,7 @@ def test_get_contacts_by_creator(db: Session, test_contact):
     assert all(c.created_by_id == test_contact.created_by_id for c in contacts)
 
 
-def test_get_active_contacts(db: Session, test_contact, inactive_contact):
+def test_get_active_contacts(db, test_contact, inactive_contact):
     """Test retrieving only active contacts."""
     active_contacts = ContactService(db).get_active_contacts()
 
@@ -144,7 +144,7 @@ def test_get_active_contacts(db: Session, test_contact, inactive_contact):
     assert all(c.is_active is True for c in active_contacts)
 
 
-def test_update_contact(db: Session, test_contact):
+def test_update_contact(db, test_contact):
     """Test updating a contact."""
     update_data = {
         "first_name": "Updated",
@@ -169,7 +169,7 @@ def test_update_contact(db: Session, test_contact):
     assert updated_contact.created_by_id == test_contact.created_by_id
 
 
-def test_update_contact_partial(db: Session, test_contact):
+def test_update_contact_partial(db, test_contact):
     """Test updating a contact with partial data."""
     update_data = {"first_name": "Only First Name Updated"}
     contact_update = ContactUpdate(**update_data)
@@ -186,7 +186,7 @@ def test_update_contact_partial(db: Session, test_contact):
     assert updated_contact.company == test_contact.company
 
 
-def test_delete_contact(db: Session, test_contact):
+def test_delete_contact(db, test_contact):
     """Test soft deleting a contact."""
     contact_service = ContactService(db)
 
@@ -199,7 +199,7 @@ def test_delete_contact(db: Session, test_contact):
     assert deleted_contact is None
 
 
-def test_contact_not_found_cases(db: Session):
+def test_contact_not_found_cases(db):
     """Test various not found cases."""
     contact_service = ContactService(db)
     non_existent_id = uuid4()
@@ -222,7 +222,7 @@ def test_contact_not_found_cases(db: Session):
     assert contact_service.delete_contact(non_existent_id) is False
 
 
-def test_search_contacts_with_filters(db: Session, test_contact):
+def test_search_contacts_with_filters(db, test_contact):
     """Test searching contacts with dynamic filters."""
     # Search using ilike filter on first name
     filters = {
@@ -247,7 +247,7 @@ def test_search_contacts_with_filters(db: Session, test_contact):
     assert len(results) == 0
 
 
-def test_search_contacts_by_company(db: Session, test_contact):
+def test_search_contacts_by_company(db, test_contact):
     """Test searching contacts by company."""
     filters = {
         "company": {"operator": "ilike", "value": f"%{test_contact.company[:5]}%"}
@@ -258,7 +258,7 @@ def test_search_contacts_by_company(db: Session, test_contact):
     assert any(contact.id == test_contact.id for contact in results)
 
 
-def test_search_contacts_by_contact_type(db: Session, test_contact):
+def test_search_contacts_by_contact_type(db, test_contact):
     """Test searching contacts by contact type."""
     filters = {"contact_type": test_contact.contact_type}
     results = ContactService(db).search(filters)
@@ -267,7 +267,7 @@ def test_search_contacts_by_contact_type(db: Session, test_contact):
     assert any(contact.id == test_contact.id for contact in results)
 
 
-def test_toggle_contact_active_status(db: Session, test_contact):
+def test_toggle_contact_active_status(db, test_contact):
     """Test toggling contact active status."""
     contact_service = ContactService(db)
     original_status = test_contact.is_active
@@ -281,7 +281,7 @@ def test_toggle_contact_active_status(db: Session, test_contact):
     assert updated_contact.id == test_contact.id
 
 
-def test_toggle_contact_active_status_not_found(db: Session):
+def test_toggle_contact_active_status_not_found(db):
     """Test toggling contact active status for non-existent contact."""
     contact_service = ContactService(db)
     non_existent_id = uuid4()
@@ -293,7 +293,7 @@ def test_toggle_contact_active_status_not_found(db: Session):
     assert updated_contact is None
 
 
-def test_contact_full_name_property(db: Session, test_contact):
+def test_contact_full_name_property(db, test_contact):
     """Test the full_name property of the contact."""
     # Test with all name parts
     expected_full_name = f"{test_contact.first_name} {test_contact.last_name}"
@@ -311,12 +311,12 @@ def test_contact_full_name_property(db: Session, test_contact):
     assert test_contact.full_name == ""
 
 
-def test_contact_display_name_property(db: Session, test_contact):
+def test_contact_display_name_property(db, test_contact):
     """Test the display_name property of the contact."""
     assert test_contact.display_name == test_contact.full_name
 
 
-def test_restore_contact(db: Session, test_contact):
+def test_restore_contact(db, test_contact):
     """Test restoring a soft-deleted contact."""
     contact_service = ContactService(db)
 
@@ -334,7 +334,7 @@ def test_restore_contact(db: Session, test_contact):
     assert restored_contact.id == test_contact.id
 
 
-def test_hard_delete_contact(db: Session, test_contact):
+def test_hard_delete_contact(db, test_contact):
     """Test hard deleting a contact."""
     contact_service = ContactService(db)
 
@@ -347,7 +347,7 @@ def test_hard_delete_contact(db: Session, test_contact):
     assert deleted_contact is None
 
 
-def test_get_deleted_contacts(db: Session, test_contact):
+def test_get_deleted_contacts(db, test_contact):
     """Test getting soft-deleted contacts."""
     contact_service = ContactService(db)
 
@@ -360,7 +360,7 @@ def test_get_deleted_contacts(db: Session, test_contact):
     assert any(c.id == test_contact.id for c in deleted_contacts)
 
 
-def test_get_deleted_contact(db: Session, test_contact):
+def test_get_deleted_contact(db, test_contact):
     """Test getting a specific soft-deleted contact."""
     contact_service = ContactService(db)
 
@@ -373,7 +373,7 @@ def test_get_deleted_contact(db: Session, test_contact):
     assert deleted_contact.id == test_contact.id
 
 
-def test_get_contacts_deleted_after(db: Session, test_contact):
+def test_get_contacts_deleted_after(db, test_contact):
     """Test getting contacts deleted after a specific date."""
     contact_service = ContactService(db)
 
@@ -387,7 +387,7 @@ def test_get_contacts_deleted_after(db: Session, test_contact):
     assert any(c.id == test_contact.id for c in deleted_contacts)
 
 
-def test_search_text(db: Session, test_contact):
+def test_search_text(db, test_contact):
     """Test searching contacts by text across multiple fields."""
     contact_service = ContactService(db)
 
@@ -418,7 +418,7 @@ def test_search_text(db: Session, test_contact):
     assert len(results) == 0
 
 
-def test_search_text_with_pagination(db: Session, test_contact):
+def test_search_text_with_pagination(db, test_contact):
     """Test searching contacts by text with pagination."""
     contact_service = ContactService(db)
 
@@ -428,7 +428,7 @@ def test_search_text_with_pagination(db: Session, test_contact):
     assert len(results) <= 10
 
 
-def test_search_text_case_insensitive(db: Session, test_contact):
+def test_search_text_case_insensitive(db, test_contact):
     """Test that text search is case-insensitive."""
     contact_service = ContactService(db)
 

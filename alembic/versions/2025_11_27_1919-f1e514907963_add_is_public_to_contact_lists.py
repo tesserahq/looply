@@ -23,7 +23,14 @@ def upgrade() -> None:
     """Upgrade schema."""
     op.add_column(
         "contact_lists",
-        sa.Column("is_public", sa.Boolean(), nullable=False, default=False),
+        sa.Column("is_public", sa.Boolean(), nullable=True, server_default=sa.false()),
+    )
+    op.execute("UPDATE contact_lists SET is_public = FALSE WHERE is_public IS NULL")
+    op.alter_column(
+        "contact_lists",
+        "is_public",
+        existing_type=sa.Boolean(),
+        nullable=False,
     )
 
 

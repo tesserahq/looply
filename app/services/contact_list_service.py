@@ -209,18 +209,42 @@ class ContactListService(SoftDeleteService[ContactList]):
         if not contact:
             return None
 
-        # Check if member already exists
+        # Check if active member already exists
         existing_member = (
             self.db.query(ContactListMember)
             .filter(
                 ContactListMember.contact_list_id == contact_list_id,
                 ContactListMember.contact_id == contact_id,
+                ContactListMember.deleted_at.is_(None),
             )
             .first()
         )
 
         if existing_member:
             return None
+
+        # Check if soft-deleted member exists (for restoration)
+        # Need to skip soft delete filter to find soft-deleted members
+        soft_deleted_member = (
+            self.db.query(ContactListMember)
+            .execution_options(skip_soft_delete_filter=True)
+            .filter(
+                ContactListMember.contact_list_id == contact_list_id,
+                ContactListMember.contact_id == contact_id,
+                ContactListMember.deleted_at.isnot(None),
+            )
+            .first()
+        )
+
+        if soft_deleted_member:
+            # Restore the soft-deleted member
+            from datetime import datetime, timezone
+
+            soft_deleted_member.deleted_at = None
+            soft_deleted_member.updated_at = datetime.now(timezone.utc)
+            self.db.commit()
+            self.db.refresh(soft_deleted_member)
+            return soft_deleted_member
 
         # Create new membership
         member = ContactListMember(
@@ -247,6 +271,7 @@ class ContactListService(SoftDeleteService[ContactList]):
             .filter(
                 ContactListMember.contact_list_id == contact_list_id,
                 ContactListMember.contact_id == contact_id,
+                ContactListMember.deleted_at.is_(None),
             )
             .first()
         )
@@ -298,6 +323,29 @@ class ContactListService(SoftDeleteService[ContactList]):
             .all()
         )
 
+    def get_contact_list_member(
+        self, contact_list_id: UUID, contact_id: UUID
+    ) -> Optional[ContactListMember]:
+        """
+        Get the contact list member relationship if it exists.
+
+        Args:
+            contact_list_id: The ID of the contact list
+            contact_id: The ID of the contact
+
+        Returns:
+            Optional[ContactListMember]: The member relationship if it exists, None otherwise
+        """
+        return (
+            self.db.query(ContactListMember)
+            .filter(
+                ContactListMember.contact_list_id == contact_list_id,
+                ContactListMember.contact_id == contact_id,
+                ContactListMember.deleted_at.is_(None),
+            )
+            .first()
+        )
+
     def is_contact_in_list(self, contact_list_id: UUID, contact_id: UUID) -> bool:
         """
         Check if a contact is a member of a contact list.
@@ -309,15 +357,7 @@ class ContactListService(SoftDeleteService[ContactList]):
         Returns:
             bool: True if contact is in the list, False otherwise
         """
-        member = (
-            self.db.query(ContactListMember)
-            .filter(
-                ContactListMember.contact_list_id == contact_list_id,
-                ContactListMember.contact_id == contact_id,
-                ContactListMember.deleted_at.is_(None),
-            )
-            .first()
-        )
+        member = self.get_contact_list_member(contact_list_id, contact_id)
         return member is not None
 
     def get_list_member_count(self, contact_list_id: UUID) -> int:

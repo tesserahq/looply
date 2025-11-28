@@ -233,8 +233,11 @@ def test_get_my_subscriptions_empty(client_test_user: TestClient):
     assert response.status_code == 200
 
     data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 0
+    assert "items" in data
+    assert isinstance(data["items"], list)
+    assert len(data["items"]) == 0
+    assert data["page"] == 1
+    assert data["total"] == 0
 
 
 def test_get_my_subscriptions_with_subscriptions(
@@ -254,10 +257,13 @@ def test_get_my_subscriptions_with_subscriptions(
     assert response.status_code == 200
 
     data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 1
-    assert data[0]["id"] == str(public_contact_list.id)
-    assert data[0]["is_public"] is True
+    assert "items" in data
+    assert isinstance(data["items"], list)
+    assert len(data["items"]) == 1
+    assert data["items"][0]["id"] == str(public_contact_list.id)
+    # Verify created_by_id and is_public are not in the response
+    assert "created_by_id" not in data["items"][0]
+    assert "is_public" not in data["items"][0]
 
 
 def test_get_my_subscriptions_only_public_lists(
@@ -287,13 +293,16 @@ def test_get_my_subscriptions_only_public_lists(
     assert response.status_code == 200
 
     data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 1
-    assert data[0]["id"] == str(public_contact_list.id)
-    assert data[0]["is_public"] is True
+    assert "items" in data
+    assert isinstance(data["items"], list)
+    assert len(data["items"]) == 1
+    assert data["items"][0]["id"] == str(public_contact_list.id)
+    # Verify created_by_id and is_public are not in the response
+    assert "created_by_id" not in data["items"][0]
+    assert "is_public" not in data["items"][0]
 
     # Verify private list is not included
-    list_ids = [item["id"] for item in data]
+    list_ids = [item["id"] for item in data["items"]]
     assert str(test_contact_list.id) not in list_ids
 
 
@@ -337,13 +346,16 @@ def test_get_my_subscriptions_multiple_public_lists(
     assert response.status_code == 200
 
     data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 2
+    assert "items" in data
+    assert isinstance(data["items"], list)
+    assert len(data["items"]) == 2
 
-    # Verify both lists are included and are public
-    list_ids = [item["id"] for item in data]
+    # Verify both lists are included
+    list_ids = [item["id"] for item in data["items"]]
     assert str(public_list1.id) in list_ids
     assert str(public_list2.id) in list_ids
 
-    for item in data:
-        assert item["is_public"] is True
+    # Verify created_by_id and is_public are not in the response
+    for item in data["items"]:
+        assert "created_by_id" not in item
+        assert "is_public" not in item

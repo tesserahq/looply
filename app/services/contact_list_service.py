@@ -323,6 +323,28 @@ class ContactListService(SoftDeleteService[ContactList]):
             .all()
         )
 
+    def get_subscriptions_query(self, contact_id: UUID):
+        """
+        Get a query for public contact lists that a contact is subscribed to.
+        This is useful for pagination with fastapi-pagination.
+
+        Args:
+            contact_id: The ID of the contact
+
+        Returns:
+            Query: SQLAlchemy query object for public contact lists the contact is subscribed to
+        """
+        return (
+            self.db.query(ContactList)
+            .join(
+                ContactListMember, ContactList.id == ContactListMember.contact_list_id
+            )
+            .filter(ContactListMember.contact_id == contact_id)
+            .filter(ContactListMember.deleted_at.is_(None))
+            .filter(ContactList.is_public == True)
+            .order_by(ContactList.created_at.desc())
+        )
+
     def get_contact_list_member(
         self, contact_list_id: UUID, contact_id: UUID
     ) -> Optional[ContactListMember]:

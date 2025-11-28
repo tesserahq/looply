@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import false
 from uuid import UUID
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
@@ -11,6 +12,7 @@ from app.schemas.contact_list import (
     ContactListCreate,
     ContactListCreateRequest,
     ContactListUpdate,
+    ContactListSubscription,
     AddMembersRequest,
     MemberCountResponse,
     ListMembersResponse,
@@ -18,6 +20,7 @@ from app.schemas.contact_list import (
     SubscribeResponse,
 )
 from app.services.contact_list_service import ContactListService
+from app.models.contact_list import ContactList as ContactListModel
 from app.schemas.user import User
 from tessera_sdk.utils.auth import get_current_user
 from app.commands.contact_list.subscribe_user_command import SubscribeUserCommand
@@ -60,7 +63,7 @@ def list_public_contact_lists(db: Session = Depends(get_db)):
     return paginate(db, contact_list_service.get_public_contact_lists_query())
 
 
-@router.get("/subscriptions", response_model=list[ContactList])
+@router.get("/subscriptions", response_model=Page[ContactListSubscription])
 def get_my_subscriptions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -80,19 +83,17 @@ def get_my_subscriptions(
     contact = contact_service.get_contact_by_email(current_user.email)
 
     if not contact:
-        # User has no contact, return empty list
-        return []
+        # User has no contact, return empty paginated result
+        # Create an empty query to return empty pagination
+        contact_list_service = ContactListService(db)
+        empty_query = db.query(ContactListModel).filter(false())
+        return paginate(db, empty_query)
 
-    # Get all contact lists for the contact
+    # Get query for public contact lists the contact is subscribed to
     contact_list_service = ContactListService(db)
-    all_lists = contact_list_service.get_contact_lists_for_contact(contact.id)
+    query = contact_list_service.get_subscriptions_query(contact.id)  # type: ignore[arg-type]
 
-    # Filter to only return public lists
-    public_lists = [
-        contact_list for contact_list in all_lists if contact_list.is_public
-    ]
-
-    return public_lists
+    return paginate(db, query)
 
 
 @router.get("/{contact_list_id}", response_model=ContactList)

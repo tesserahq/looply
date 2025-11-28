@@ -77,6 +77,27 @@ class ContactList(ContactListInDB):
     pass
 
 
+class ContactListSubscription(BaseModel):
+    """Schema for contact list data returned in subscription endpoints. Excludes created_by_id and is_public fields."""
+
+    id: UUID
+    """Unique identifier for the contact list."""
+
+    name: str
+    """Name of the contact list."""
+
+    description: Optional[str] = None
+    """Description of the contact list."""
+
+    created_at: datetime
+    """Timestamp when the contact list record was created."""
+
+    updated_at: datetime
+    """Timestamp when the contact list record was last updated."""
+
+    model_config = {"from_attributes": True}
+
+
 class AddMembersRequest(BaseModel):
     """Schema for adding members to a contact list."""
 

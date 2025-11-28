@@ -21,7 +21,7 @@ from app.exceptions.handlers import register_exception_handlers
 from app.core.logging_config import get_logger
 from app.db import db_manager
 
-SKIP_PATHS = ["/gazettes/share/", "/health", "/openapi.json", "/docs"]
+SKIP_PATHS = ["/health", "/openapi.json", "/docs"]
 
 
 def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
@@ -64,6 +64,7 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
             AuthenticationMiddleware,
             identies_base_url=settings.identies_host,
             skip_paths=SKIP_PATHS,
+            user_service_factory=user_service_factory,
         )
 
     else:

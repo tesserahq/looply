@@ -14,10 +14,14 @@ from app.schemas.contact_list import (
     AddMembersRequest,
     MemberCountResponse,
     ListMembersResponse,
+    SubscribeRequest,
+    SubscribeResponse,
 )
 from app.services.contact_list_service import ContactListService
 from app.schemas.user import User
 from tessera_sdk.utils.auth import get_current_user
+from app.commands.contact_list.subscribe_user_command import SubscribeUserCommand
+from app.commands.contact_list.unsubscribe_user_command import UnsubscribeUserCommand
 
 router = APIRouter(
     prefix="/contact-lists",
@@ -47,6 +51,48 @@ def list_contact_lists(db: Session = Depends(get_db)):
     """List all contact lists with pagination."""
     contact_list_service = ContactListService(db)
     return paginate(db, contact_list_service.get_contact_lists_query())
+
+
+@router.get("/public", response_model=Page[ContactList])
+def list_public_contact_lists(db: Session = Depends(get_db)):
+    """List all public contact lists with pagination."""
+    contact_list_service = ContactListService(db)
+    return paginate(db, contact_list_service.get_public_contact_lists_query())
+
+
+@router.get("/subscriptions", response_model=list[ContactList])
+def get_my_subscriptions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all public contact lists that the current user is subscribed to."""
+    from app.services.contact_service import ContactService
+
+    # Validate user email
+    if not current_user.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User email is required",
+        )
+
+    # Find contact by email
+    contact_service = ContactService(db)
+    contact = contact_service.get_contact_by_email(current_user.email)
+
+    if not contact:
+        # User has no contact, return empty list
+        return []
+
+    # Get all contact lists for the contact
+    contact_list_service = ContactListService(db)
+    all_lists = contact_list_service.get_contact_lists_for_contact(contact.id)
+
+    # Filter to only return public lists
+    public_lists = [
+        contact_list for contact_list in all_lists if contact_list.is_public
+    ]
+
+    return public_lists
 
 
 @router.get("/{contact_list_id}", response_model=ContactList)
@@ -160,7 +206,9 @@ def get_list_members(contact_list_id: UUID, db: Session = Depends(get_db)):
 
     members = contact_list_service.get_list_members(contact_list_id)
 
-    return ListMembersResponse(contact_list_id=contact_list_id, members=members)
+    return ListMembersResponse(
+        contact_list_id=contact_list_id, members=members  # type: ignore[arg-type]
+    )
 
 
 @router.get("/{contact_list_id}/members/count", response_model=MemberCountResponse)
@@ -241,3 +289,93 @@ def check_contact_membership(
         "contact_id": contact_id,
         "is_member": is_member,
     }
+
+
+# Public list subscription endpoints
+
+
+@router.post(
+    "/{contact_list_id}/subscribe",
+    response_model=SubscribeResponse,
+    status_code=status.HTTP_200_OK,
+)
+def subscribe_to_public_list(
+    contact_list_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Subscribe a contact to a public contact list."""
+    # Validate that the contact list exists and is public
+    contact_list_service = ContactListService(db)
+    contact_list = contact_list_service.get_contact_list(contact_list_id)
+    if not contact_list:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Contact list {contact_list_id} not found",
+        )
+    if not contact_list.is_public:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Contact list {contact_list_id} is not public and cannot be subscribed to",
+        )
+
+    try:
+        command = SubscribeUserCommand(db)
+        member = command.execute(contact_list_id, current_user)
+
+        return SubscribeResponse(
+            contact_list_id=contact_list_id,
+            contact_id=UUID(str(member.contact_id)),
+            message="Successfully subscribed to the contact list",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to subscribe: {str(e)}",
+        )
+
+
+@router.delete(
+    "/{contact_list_id}/unsubscribe",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def unsubscribe_from_public_list(
+    contact_list_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Unsubscribe a contact from a public contact list."""
+    # Validate that the contact list exists and is public
+    contact_list_service = ContactListService(db)
+    contact_list = contact_list_service.get_contact_list(contact_list_id)
+    if not contact_list:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Contact list {contact_list_id} not found",
+        )
+    if not contact_list.is_public:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Contact list {contact_list_id} is not public",
+        )
+
+    try:
+        command = UnsubscribeUserCommand(db)
+        unsubscribed = command.execute(contact_list_id, current_user)
+
+        if not unsubscribed:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Contact is not subscribed to this list",
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unsubscribe: {str(e)}",
+        )

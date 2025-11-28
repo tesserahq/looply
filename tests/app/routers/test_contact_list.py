@@ -43,6 +43,42 @@ def test_list_contact_lists(client_test_user: TestClient, test_contact_list, fak
     assert len(data["items"]) > 0
 
 
+def test_list_public_contact_lists(
+    client_test_user: TestClient, public_contact_list, test_contact_list
+):
+    """Test listing only public contact lists."""
+    response = client_test_user.get("/contact-lists/public")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "items" in data
+    assert "total" in data
+    assert len(data["items"]) > 0
+
+    # Verify all returned lists are public
+    for item in data["items"]:
+        assert item["is_public"] is True
+
+    # Verify the public contact list is included
+    item_ids = [item["id"] for item in data["items"]]
+    assert str(public_contact_list.id) in item_ids
+
+    # Verify the private contact list is NOT included
+    assert str(test_contact_list.id) not in item_ids
+
+
+def test_list_public_contact_lists_empty(client_test_user: TestClient):
+    """Test listing public contact lists when none exist."""
+    response = client_test_user.get("/contact-lists/public")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "items" in data
+    assert "total" in data
+    assert data["total"] == 0
+    assert len(data["items"]) == 0
+
+
 def test_get_contact_list(client_test_user: TestClient, test_contact_list):
     """Test getting a contact list by ID."""
     response = client_test_user.get(f"/contact-lists/{test_contact_list.id}")
@@ -189,3 +225,125 @@ def test_create_and_list_multiple_contact_lists(client_test_user: TestClient, fa
     item_ids = [item["id"] for item in data["items"]]
     for created_id in created_ids:
         assert created_id in item_ids
+
+
+def test_get_my_subscriptions_empty(client_test_user: TestClient):
+    """Test getting my subscriptions when user has no subscriptions."""
+    response = client_test_user.get("/contact-lists/subscriptions")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
+
+def test_get_my_subscriptions_with_subscriptions(
+    client_test_user: TestClient, public_contact_list, db, test_user
+):
+    """Test getting my subscriptions when user is subscribed to public lists."""
+    from app.commands.contact_list.subscribe_user_command import SubscribeUserCommand
+    from app.schemas.user import User
+
+    # Subscribe user to public contact list
+    command = SubscribeUserCommand(db)
+    user_schema = User.model_validate(test_user)
+    command.execute(public_contact_list.id, user_schema)
+
+    # Get my subscriptions
+    response = client_test_user.get("/contact-lists/subscriptions")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["id"] == str(public_contact_list.id)
+    assert data[0]["is_public"] is True
+
+
+def test_get_my_subscriptions_only_public_lists(
+    client_test_user: TestClient, public_contact_list, test_contact_list, db, test_user
+):
+    """Test that subscriptions only returns public lists, not private ones."""
+    from app.commands.contact_list.subscribe_user_command import SubscribeUserCommand
+    from app.services.contact_list_service import ContactListService
+    from app.services.contact_service import ContactService
+    from app.schemas.user import User
+
+    # Subscribe user to public contact list
+    subscribe_command = SubscribeUserCommand(db)
+    user_schema = User.model_validate(test_user)
+    subscribe_command.execute(public_contact_list.id, user_schema)
+
+    # Add user's contact to private contact list (not via subscription)
+    contact_service = ContactService(db)
+    contact = contact_service.get_contact_by_email(test_user.email)
+    assert contact is not None
+
+    contact_list_service = ContactListService(db)
+    contact_list_service.add_contact_to_list(test_contact_list.id, contact.id)
+
+    # Get my subscriptions - should only return public list
+    response = client_test_user.get("/contact-lists/subscriptions")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["id"] == str(public_contact_list.id)
+    assert data[0]["is_public"] is True
+
+    # Verify private list is not included
+    list_ids = [item["id"] for item in data]
+    assert str(test_contact_list.id) not in list_ids
+
+
+def test_get_my_subscriptions_multiple_public_lists(
+    client_test_user: TestClient, db, test_user, faker
+):
+    """Test getting my subscriptions with multiple public lists."""
+    from app.models.contact_list import ContactList
+    from app.commands.contact_list.subscribe_user_command import SubscribeUserCommand
+    from app.schemas.user import User
+
+    # Create multiple public contact lists
+    public_list1 = ContactList(
+        name=faker.company(),
+        description=faker.text(max_nb_chars=100),
+        is_public=True,
+        created_by_id=test_user.id,
+    )
+    db.add(public_list1)
+    db.commit()
+    db.refresh(public_list1)
+
+    public_list2 = ContactList(
+        name=faker.company(),
+        description=faker.text(max_nb_chars=100),
+        is_public=True,
+        created_by_id=test_user.id,
+    )
+    db.add(public_list2)
+    db.commit()
+    db.refresh(public_list2)
+
+    # Subscribe user to both public lists
+    subscribe_command = SubscribeUserCommand(db)
+    user_schema = User.model_validate(test_user)
+    subscribe_command.execute(public_list1.id, user_schema)
+    subscribe_command.execute(public_list2.id, user_schema)
+
+    # Get my subscriptions
+    response = client_test_user.get("/contact-lists/subscriptions")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 2
+
+    # Verify both lists are included and are public
+    list_ids = [item["id"] for item in data]
+    assert str(public_list1.id) in list_ids
+    assert str(public_list2.id) in list_ids
+
+    for item in data:
+        assert item["is_public"] is True

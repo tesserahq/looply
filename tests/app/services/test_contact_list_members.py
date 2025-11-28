@@ -5,7 +5,7 @@ from app.models.contact_list import ContactList
 from app.models.contact import Contact
 
 
-def test_add_contact_to_list(db: Session, test_contact_list, test_contact):
+def test_add_contact_to_list(db, test_contact_list, test_contact):
     """Test adding a contact to a contact list."""
     service = ContactListService(db)
 
@@ -17,9 +17,7 @@ def test_add_contact_to_list(db: Session, test_contact_list, test_contact):
     assert member.deleted_at is None
 
 
-def test_add_contact_to_list_already_exists(
-    db: Session, test_contact_list, test_contact
-):
+def test_add_contact_to_list_already_exists(db, test_contact_list, test_contact):
     """Test adding a contact to a list when it already exists."""
     service = ContactListService(db)
 
@@ -32,7 +30,7 @@ def test_add_contact_to_list_already_exists(
     assert member2 is None
 
 
-def test_add_contact_to_nonexistent_list(db: Session, test_contact):
+def test_add_contact_to_nonexistent_list(db, test_contact):
     """Test adding a contact to a non-existent list."""
     service = ContactListService(db)
     nonexistent_list_id = uuid4()
@@ -41,7 +39,7 @@ def test_add_contact_to_nonexistent_list(db: Session, test_contact):
     assert member is None
 
 
-def test_add_nonexistent_contact_to_list(db: Session, test_contact_list):
+def test_add_nonexistent_contact_to_list(db, test_contact_list):
     """Test adding a non-existent contact to a list."""
     service = ContactListService(db)
     nonexistent_contact_id = uuid4()
@@ -50,7 +48,7 @@ def test_add_nonexistent_contact_to_list(db: Session, test_contact_list):
     assert member is None
 
 
-def test_remove_contact_from_list(db: Session, test_contact_list, test_contact):
+def test_remove_contact_from_list(db, test_contact_list, test_contact):
     """Test removing a contact from a contact list."""
     service = ContactListService(db)
 
@@ -66,7 +64,7 @@ def test_remove_contact_from_list(db: Session, test_contact_list, test_contact):
     assert count == 0
 
 
-def test_remove_contact_from_list_not_found(db: Session, test_contact_list):
+def test_remove_contact_from_list_not_found(db, test_contact_list):
     """Test removing a contact that's not in the list."""
     service = ContactListService(db)
     nonexistent_contact_id = uuid4()
@@ -77,9 +75,7 @@ def test_remove_contact_from_list_not_found(db: Session, test_contact_list):
     assert success is False
 
 
-def test_get_list_members(
-    db: Session, test_contact_list, test_contact, faker, test_user
-):
+def test_get_list_members(db, test_contact_list, test_contact, faker, test_user):
     """Test getting all members of a contact list."""
     service = ContactListService(db)
 
@@ -110,7 +106,7 @@ def test_get_list_members(
     assert another_contact.id in member_ids
 
 
-def test_get_list_members_empty(db: Session, test_contact_list):
+def test_get_list_members_empty(db, test_contact_list):
     """Test getting members from an empty list."""
     service = ContactListService(db)
 
@@ -118,9 +114,7 @@ def test_get_list_members_empty(db: Session, test_contact_list):
     assert len(members) == 0
 
 
-def test_get_list_member_count(
-    db: Session, test_contact_list, test_contact, faker, test_user
-):
+def test_get_list_member_count(db, test_contact_list, test_contact, faker, test_user):
     """Test getting the count of members in a list."""
     service = ContactListService(db)
 
@@ -152,7 +146,7 @@ def test_get_list_member_count(
     assert count == 2
 
 
-def test_is_contact_in_list(db: Session, test_contact_list, test_contact):
+def test_is_contact_in_list(db, test_contact_list, test_contact):
     """Test checking if a contact is in a list."""
     service = ContactListService(db)
 
@@ -166,7 +160,7 @@ def test_is_contact_in_list(db: Session, test_contact_list, test_contact):
     assert service.is_contact_in_list(test_contact_list.id, test_contact.id) is True
 
 
-def test_is_contact_in_list_after_removal(db: Session, test_contact_list, test_contact):
+def test_is_contact_in_list_after_removal(db, test_contact_list, test_contact):
     """Test checking if contact is in list after removal."""
     service = ContactListService(db)
 
@@ -179,7 +173,7 @@ def test_is_contact_in_list_after_removal(db: Session, test_contact_list, test_c
 
 
 def test_get_contact_lists_for_contact(
-    db: Session, test_contact_list, test_contact, faker, test_user
+    db, test_contact_list, test_contact, faker, test_user
 ):
     """Test getting all contact lists that a contact belongs to."""
     service = ContactListService(db)
@@ -207,7 +201,7 @@ def test_get_contact_lists_for_contact(
     assert another_list.id in list_ids
 
 
-def test_get_contact_lists_for_contact_without_lists(db: Session, test_contact):
+def test_get_contact_lists_for_contact_without_lists(db, test_contact):
     """Test getting lists for a contact that's not in any list."""
     service = ContactListService(db)
 
@@ -216,7 +210,7 @@ def test_get_contact_lists_for_contact_without_lists(db: Session, test_contact):
 
 
 def test_add_multiple_contacts_to_list(
-    db: Session, test_contact_list, test_contact, faker, test_user
+    db, test_contact_list, test_contact, faker, test_user
 ):
     """Test adding multiple contacts to a list at once."""
     service = ContactListService(db)
@@ -258,7 +252,7 @@ def test_add_multiple_contacts_to_list(
 
 
 def test_remove_multiple_contacts_from_list(
-    db: Session, test_contact_list, test_contact, faker, test_user
+    db, test_contact_list, test_contact, faker, test_user
 ):
     """Test removing multiple contacts from a list."""
     service = ContactListService(db)
@@ -292,9 +286,7 @@ def test_remove_multiple_contacts_from_list(
     assert len(members) == 0
 
 
-def test_clear_list_members(
-    db: Session, test_contact_list, test_contact, faker, test_user
-):
+def test_clear_list_members(db, test_contact_list, test_contact, faker, test_user):
     """Test clearing all members from a list."""
     service = ContactListService(db)
 
@@ -335,7 +327,7 @@ def test_clear_list_members(
     assert len(members) == 0
 
 
-def test_clear_empty_list(db: Session, test_contact_list):
+def test_clear_empty_list(db, test_contact_list):
     """Test clearing members from an already empty list."""
     service = ContactListService(db)
 

@@ -17,6 +17,9 @@ from tessera_sdk.utils.auth import get_current_user
 from app.commands.contact.create_contact_command import CreateContactCommand
 from app.commands.contact.update_contact_command import UpdateContactCommand
 from app.commands.contact.delete_contact_command import DeleteContactCommand
+from app.commands.contact.batch_create_contacts_command import (
+    BatchCreateContactsCommand,
+)
 
 router = APIRouter(
     prefix="/contacts",
@@ -42,6 +45,28 @@ def create_contact(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create contact: {str(e)}",
+        )
+
+
+@router.post(
+    "/batch", response_model=list[Contact], status_code=status.HTTP_201_CREATED
+)
+def batch_create_contacts(
+    contacts_data: list[ContactCreateRequest],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Batch create multiple contacts."""
+    try:
+        command = BatchCreateContactsCommand(db)
+        contacts = command.execute(contacts_data, current_user.id)
+        return contacts
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to batch create contacts: {str(e)}",
         )
 
 

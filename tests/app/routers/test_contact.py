@@ -173,6 +173,139 @@ class TestContactRouter:
         assert response.status_code == 404
         assert "Contact not found" in response.json()["detail"]
 
+    def test_batch_create_contacts(self, client, faker):
+        """Test POST /contacts/batch endpoint."""
+        contacts_data = [
+            {
+                "first_name": faker.first_name(),
+                "last_name": faker.last_name(),
+                "contact_type": "personal",
+                "phone_type": "mobile",
+                "email": faker.email(),
+                "phone": faker.phone_number(),
+            },
+            {
+                "first_name": faker.first_name(),
+                "last_name": faker.last_name(),
+                "contact_type": "business",
+                "phone_type": "work",
+                "email": faker.email(),
+                "phone": faker.phone_number(),
+            },
+            {
+                "first_name": faker.first_name(),
+                "last_name": faker.last_name(),
+                "contact_type": "personal",
+                "phone_type": "mobile",
+                "email": faker.email(),
+            },
+        ]
+
+        response = client.post("/contacts/batch", json=contacts_data)
+        assert response.status_code == 201
+        contacts = response.json()
+        assert isinstance(contacts, list)
+        assert len(contacts) == 3
+        assert contacts[0]["first_name"] == contacts_data[0]["first_name"]
+        assert contacts[1]["first_name"] == contacts_data[1]["first_name"]
+        assert contacts[2]["first_name"] == contacts_data[2]["first_name"]
+
+    def test_batch_create_contacts_empty_list(self, client):
+        """Test POST /contacts/batch with empty list fails."""
+        response = client.post("/contacts/batch", json=[])
+        assert response.status_code == 400
+        assert "No contacts provided" in response.json()["detail"]
+
+    def test_batch_create_contacts_duplicate_email_in_batch(self, client, faker):
+        """Test POST /contacts/batch with duplicate email within batch fails."""
+        duplicate_email = faker.email()
+        contacts_data = [
+            {
+                "first_name": faker.first_name(),
+                "last_name": faker.last_name(),
+                "contact_type": "personal",
+                "phone_type": "mobile",
+                "email": duplicate_email,
+            },
+            {
+                "first_name": faker.first_name(),
+                "last_name": faker.last_name(),
+                "contact_type": "personal",
+                "phone_type": "mobile",
+                "email": duplicate_email,  # Duplicate email
+            },
+        ]
+
+        response = client.post("/contacts/batch", json=contacts_data)
+        assert response.status_code == 400
+        assert "Duplicate email" in response.json()["detail"]
+
+    def test_batch_create_contacts_duplicate_phone_in_batch(self, client, faker):
+        """Test POST /contacts/batch with duplicate phone within batch fails."""
+        duplicate_phone = faker.phone_number()
+        contacts_data = [
+            {
+                "first_name": faker.first_name(),
+                "last_name": faker.last_name(),
+                "contact_type": "personal",
+                "phone_type": "mobile",
+                "phone": duplicate_phone,
+            },
+            {
+                "first_name": faker.first_name(),
+                "last_name": faker.last_name(),
+                "contact_type": "personal",
+                "phone_type": "mobile",
+                "phone": duplicate_phone,  # Duplicate phone
+            },
+        ]
+
+        response = client.post("/contacts/batch", json=contacts_data)
+        assert response.status_code == 400
+        assert "Duplicate phone" in response.json()["detail"]
+
+    def test_batch_create_contacts_duplicate_email_existing(
+        self, client, test_contact, faker
+    ):
+        """Test POST /contacts/batch with duplicate email against existing contact fails."""
+        contacts_data = [
+            {
+                "first_name": faker.first_name(),
+                "last_name": faker.last_name(),
+                "contact_type": "personal",
+                "phone_type": "mobile",
+                "email": test_contact.email,  # Email from existing contact
+            },
+        ]
+
+        response = client.post("/contacts/batch", json=contacts_data)
+        assert response.status_code == 400
+        assert (
+            f"Email '{test_contact.email}' already registered (position 1)"
+            in response.json()["detail"]
+        )
+
+    def test_batch_create_contacts_duplicate_phone_existing(
+        self, client, test_contact, faker
+    ):
+        """Test POST /contacts/batch with duplicate phone against existing contact fails."""
+        contacts_data = [
+            {
+                "first_name": faker.first_name(),
+                "last_name": faker.last_name(),
+                "contact_type": "personal",
+                "phone_type": "mobile",
+                "phone": test_contact.phone,  # Phone from existing contact
+            },
+        ]
+
+        response = client.post("/contacts/batch", json=contacts_data)
+        assert response.status_code == 400
+        assert (
+            f"Phone number '{test_contact.phone}' already registered (position 1)"
+            in response.json()["detail"]
+        )
+
 
 class TestContactRouterPagination:
     """Test class specifically for pagination functionality."""

@@ -136,6 +136,25 @@ class ContactService(SoftDeleteService[Contact]):
         self.db.refresh(db_contact)
         return db_contact
 
+    def bulk_create_contacts(self, contacts: List[ContactCreate]) -> List[Contact]:
+        """
+        Bulk create multiple contacts in a single transaction.
+
+        Args:
+            contacts: List of contact data to create
+
+        Returns:
+            List[Contact]: List of created contacts
+        """
+        db_contacts = [Contact(**contact.model_dump()) for contact in contacts]
+        self.db.add_all(db_contacts)
+        self.db.flush()  # Flush to get IDs assigned
+        self.db.commit()
+        # Refresh all contacts to get full data including timestamps
+        for contact in db_contacts:
+            self.db.refresh(contact)
+        return db_contacts
+
     def update_contact(
         self, contact_id: UUID, contact: ContactUpdate
     ) -> Optional[Contact]:

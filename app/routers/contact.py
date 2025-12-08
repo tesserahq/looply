@@ -14,6 +14,9 @@ from app.schemas.contact import (
 from app.services.contact_service import ContactService
 from app.schemas.user import User
 from tessera_sdk.utils.auth import get_current_user
+from app.commands.contact.create_contact_command import CreateContactCommand
+from app.commands.contact.update_contact_command import UpdateContactCommand
+from app.commands.contact.delete_contact_command import DeleteContactCommand
 
 router = APIRouter(
     prefix="/contacts",
@@ -29,26 +32,17 @@ def create_contact(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new contact."""
-    contact_service = ContactService(db)
-
-    # Check if email already exists
-    if contact_data.email and contact_service.get_contact_by_email(contact_data.email):
+    try:
+        command = CreateContactCommand(db)
+        contact = command.execute(contact_data, current_user.id)
+        return contact
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create contact: {str(e)}",
         )
-
-    # Check if phone already exists
-    if contact_data.phone and contact_service.get_contact_by_phone(contact_data.phone):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Phone number already registered",
-        )
-    contact = ContactCreate(
-        **contact_data.model_dump(),
-        created_by_id=current_user.id,
-    )
-
-    return contact_service.create_contact(contact)
 
 
 @router.get("", response_model=Page[Contact])
@@ -95,41 +89,49 @@ def get_contact(contact_id: UUID, db: Session = Depends(get_db)):
 
 @router.put("/{contact_id}", response_model=Contact)
 def update_contact(
-    contact_id: UUID, contact: ContactUpdate, db: Session = Depends(get_db)
+    contact_id: UUID,
+    contact: ContactUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Update a contact."""
-    contact_service = ContactService(db)
-
-    # Check if email is being updated and already exists
-    if contact.email:
-        existing_contact = contact_service.get_contact_by_email(contact.email)
-        if existing_contact and existing_contact.id != contact_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered",
-            )
-
-    # Check if phone is being updated and already exists
-    if contact.phone:
-        existing_contact = contact_service.get_contact_by_phone(contact.phone)
-        if existing_contact and existing_contact.id != contact_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Phone number already registered",
-            )
-
-    updated_contact = contact_service.update_contact(contact_id, contact)
-    if not updated_contact:
+    try:
+        command = UpdateContactCommand(db)
+        updated_contact = command.execute(contact_id, contact, current_user)
+        return updated_contact
+    except ValueError as e:
+        # Check if it's a "not found" error
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update contact: {str(e)}",
         )
-    return updated_contact
 
 
 @router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_contact(contact_id: UUID, db: Session = Depends(get_db)):
+def delete_contact(
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Delete a contact."""
-    if not ContactService(db).delete_contact(contact_id):
+    try:
+        command = DeleteContactCommand(db)
+        deleted = command.execute(contact_id, current_user)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found"
+            )
+    except ValueError as e:
+        # Check if it's a "not found" error
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete contact: {str(e)}",
         )

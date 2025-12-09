@@ -50,9 +50,7 @@ class TestContactInteractionActions:
 class TestContactInteractionRouter:
     """Test class for contact interaction router endpoints."""
 
-    def test_create_contact_interaction(
-        self, client, test_contact, faker
-    ):
+    def test_create_contact_interaction(self, client, test_contact, faker):
         """Test POST /contacts/{contact_id}/interactions endpoint."""
         interaction_data = {
             "note": faker.text(max_nb_chars=500),
@@ -70,9 +68,7 @@ class TestContactInteractionRouter:
         assert data["id"] is not None
         assert data["created_by_id"] == str(client.app.state.test_user.id)
 
-    def test_create_contact_interaction_with_action(
-        self, client, test_contact, faker
-    ):
+    def test_create_contact_interaction_with_action(self, client, test_contact, faker):
         """Test POST /contacts/{contact_id}/interactions with action."""
         interaction_data = {
             "note": faker.text(max_nb_chars=500),
@@ -92,9 +88,7 @@ class TestContactInteractionRouter:
         assert data["action"] == interaction_data["action"]
         assert data["action_timestamp"] is not None
 
-    def test_create_contact_interaction_minimal(
-        self, client, test_contact, faker
-    ):
+    def test_create_contact_interaction_minimal(self, client, test_contact, faker):
         """Test POST /contacts/{contact_id}/interactions with minimal data."""
         interaction_data = {
             "note": faker.text(max_nb_chars=200),
@@ -109,9 +103,7 @@ class TestContactInteractionRouter:
         assert data["note"] == interaction_data["note"]
         assert data["interaction_timestamp"] is not None  # Should be auto-set
 
-    def test_create_contact_interaction_contact_not_found(
-        self, client, faker
-    ):
+    def test_create_contact_interaction_contact_not_found(self, client, faker):
         """Test POST /contacts/{contact_id}/interactions with non-existent contact."""
         fake_contact_id = uuid4()
         interaction_data = {
@@ -149,9 +141,7 @@ class TestContactInteractionRouter:
         for item in data["items"]:
             assert item["contact_id"] == str(test_contact.id)
 
-    def test_list_contact_interactions_empty(
-        self, client, test_contact
-    ):
+    def test_list_contact_interactions_empty(self, client, test_contact):
         """Test GET /contacts/{contact_id}/interactions with no interactions."""
         response = client.get(f"/contacts/{test_contact.id}/interactions")
         assert response.status_code == 200
@@ -167,9 +157,7 @@ class TestContactInteractionRouter:
         multiple_interactions_for_contact,
     ):
         """Test GET /contacts/{contact_id}/interactions with pagination."""
-        response = client.get(
-            f"/contacts/{test_contact.id}/interactions?page=1&size=2"
-        )
+        response = client.get(f"/contacts/{test_contact.id}/interactions?page=1&size=2")
         assert response.status_code == 200
 
         data = response.json()
@@ -184,9 +172,7 @@ class TestContactInteractionRouter:
         multiple_interactions_for_contact,
     ):
         """Test GET /contacts/{contact_id}/interactions/last endpoint."""
-        response = client.get(
-            f"/contacts/{test_contact.id}/interactions/last"
-        )
+        response = client.get(f"/contacts/{test_contact.id}/interactions/last")
         assert response.status_code == 200
 
         data = response.json()
@@ -204,23 +190,15 @@ class TestContactInteractionRouter:
             )
             assert data["interaction_timestamp"] == latest["interaction_timestamp"]
 
-    def test_get_last_contact_interaction_not_found(
-        self, client, test_contact
-    ):
+    def test_get_last_contact_interaction_not_found(self, client, test_contact):
         """Test GET /contacts/{contact_id}/interactions/last with no interactions."""
-        response = client.get(
-            f"/contacts/{test_contact.id}/interactions/last"
-        )
+        response = client.get(f"/contacts/{test_contact.id}/interactions/last")
         assert response.status_code == 404
         assert "no interactions found" in response.json()["detail"].lower()
 
-    def test_get_contact_interaction(
-        self, client, test_contact_interaction
-    ):
+    def test_get_contact_interaction(self, client, test_contact_interaction):
         """Test GET /contact-interactions/{interaction_id} endpoint."""
-        response = client.get(
-            f"/contact-interactions/{test_contact_interaction.id}"
-        )
+        response = client.get(f"/contact-interactions/{test_contact_interaction.id}")
         assert response.status_code == 200
 
         data = response.json()
@@ -235,9 +213,7 @@ class TestContactInteractionRouter:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
-    def test_update_contact_interaction(
-        self, client, test_contact_interaction, faker
-    ):
+    def test_update_contact_interaction(self, client, test_contact_interaction, faker):
         """Test PUT /contact-interactions/{interaction_id} endpoint."""
         update_data = {
             "note": "Updated note",
@@ -271,22 +247,16 @@ class TestContactInteractionRouter:
         assert data["note"] == original_note  # Should remain unchanged
         assert data["action"] == update_data["action"]
 
-    def test_update_contact_interaction_not_found(
-        self, client, faker
-    ):
+    def test_update_contact_interaction_not_found(self, client, faker):
         """Test PUT /contact-interactions/{interaction_id} with non-existent ID."""
         fake_id = uuid4()
         update_data = {"note": "Updated note"}
 
-        response = client.put(
-            f"/contact-interactions/{fake_id}", json=update_data
-        )
+        response = client.put(f"/contact-interactions/{fake_id}", json=update_data)
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
-    def test_delete_contact_interaction(
-        self, client, test_contact_interaction
-    ):
+    def test_delete_contact_interaction(self, client, test_contact_interaction):
         """Test DELETE /contact-interactions/{interaction_id} endpoint."""
         interaction_id = test_contact_interaction.id
         response = client.delete(f"/contact-interactions/{interaction_id}")
@@ -381,9 +351,7 @@ class TestContactInteractionRouter:
         interaction_with_no_action_timestamp,
     ):
         """Test GET /contact-interactions/pending-actions with pagination."""
-        response = client.get(
-            "/contact-interactions/pending-actions?page=1&size=1"
-        )
+        response = client.get("/contact-interactions/pending-actions?page=1&size=1")
         assert response.status_code == 200
 
         data = response.json()

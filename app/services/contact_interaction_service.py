@@ -159,6 +159,30 @@ class ContactInteractionService(SoftDeleteService[ContactInteraction]):
             .all()
         )
 
+    def get_pending_actions_query(self):
+        """
+        Get a query for all interactions with pending actions.
+        This is useful for pagination with fastapi-pagination.
+
+        Returns:
+            Query: SQLAlchemy query object for pending actions
+        """
+        from datetime import datetime, timezone
+        from sqlalchemy import or_
+
+        now = datetime.now(timezone.utc)
+        return (
+            self.db.query(ContactInteraction)
+            .filter(ContactInteraction.action.isnot(None))
+            .filter(
+                or_(
+                    ContactInteraction.action_timestamp.is_(None),
+                    ContactInteraction.action_timestamp > now,
+                )
+            )
+            .order_by(ContactInteraction.action_timestamp.asc().nullslast())
+        )
+
     def get_pending_actions_by_contact(
         self, contact_id: UUID, skip: int = 0, limit: int = 100
     ) -> List[ContactInteraction]:

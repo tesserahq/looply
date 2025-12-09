@@ -36,16 +36,17 @@ class ContactInteractionCreate(ContactInteractionBase):
 
 
 class ContactInteractionCreateRequest(BaseModel):
-    """Schema for creating a new contact interaction via API request."""
+    """Schema for creating a new contact interaction via API request.
 
-    contact_id: UUID
-    """ID of the contact this interaction is associated with."""
+    Note: contact_id comes from the URL path parameter and interaction_timestamp
+    is set by the router (defaults to current time if not provided).
+    """
 
     note: str = Field(..., min_length=1, max_length=1000)
     """The interaction note text (typically 500-1000 characters)."""
 
     interaction_timestamp: Optional[datetime] = None
-    """Timestamp when the interaction actually occurred. Defaults to current time if not provided."""
+    """Optional timestamp when the interaction actually occurred. Defaults to current time if not provided."""
 
     action: Optional[str] = None
     """Optional action item for follow-up (e.g., 'Follow up in 2 weeks', 'Send proposal')."""

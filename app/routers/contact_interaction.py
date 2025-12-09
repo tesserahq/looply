@@ -13,7 +13,6 @@ from app.schemas.contact_interaction import (
     ContactInteractionUpdate,
 )
 from app.services.contact_interaction_service import ContactInteractionService
-from app.models.contact_interaction import ContactInteraction as ContactInteractionModel
 from app.schemas.user import User
 from app.routers.utils.dependencies import get_contact_by_id
 from app.models.contact import Contact
@@ -32,6 +31,27 @@ nested_router = APIRouter(
     tags=["contact-interactions"],
     responses={404: {"description": "Not found"}},
 )
+
+
+@router.get("/actions")
+def list_actions():
+    """Get all available actions for contact interactions."""
+    actions = ContactInteractionAction.get_all_with_labels()
+
+    return {
+        "items": actions,
+        "size": len(actions),
+        "page": 1,
+        "pages": 1,
+        "total": len(actions),
+    }
+
+
+@router.get("/pending-actions", response_model=Page[ContactInteraction])
+def get_pending_actions(db: Session = Depends(get_db)):
+    """Get all pending actions across all contacts."""
+    interaction_service = ContactInteractionService(db)
+    return paginate(db, interaction_service.get_pending_actions_query())
 
 
 @nested_router.post(
@@ -54,7 +74,7 @@ def create_contact_interaction(
     )
 
     interaction = ContactInteractionCreate(
-        **interaction_data.model_dump(),
+        **interaction_data.model_dump(exclude={"interaction_timestamp"}),
         contact_id=contact.id,
         interaction_timestamp=interaction_timestamp,
         created_by_id=current_user.id,
@@ -137,39 +157,3 @@ def list_contact_interactions_global(db: Session = Depends(get_db)):
     """List all contact interactions with pagination."""
     interaction_service = ContactInteractionService(db)
     return paginate(db, interaction_service.get_contact_interactions_query())
-
-
-@router.get("/pending-actions", response_model=Page[ContactInteraction])
-def get_pending_actions(db: Session = Depends(get_db)):
-    """Get all pending actions across all contacts."""
-    interaction_service = ContactInteractionService(db)
-    from datetime import datetime, timezone
-    from sqlalchemy import or_
-
-    now = datetime.now(timezone.utc)
-    query = (
-        db.query(ContactInteractionModel)
-        .filter(ContactInteractionModel.action.isnot(None))
-        .filter(
-            or_(
-                ContactInteractionModel.action_timestamp.is_(None),
-                ContactInteractionModel.action_timestamp > now,
-            )
-        )
-        .order_by(ContactInteractionModel.action_timestamp.asc().nullslast())
-    )
-    return paginate(db, query)
-
-
-@router.get("/actions")
-def list_actions():
-    """Get all available actions for contact interactions."""
-    actions = ContactInteractionAction.get_all_with_labels()
-
-    return {
-        "items": actions,
-        "size": len(actions),
-        "page": 1,
-        "pages": 1,
-        "total": len(actions),
-    }

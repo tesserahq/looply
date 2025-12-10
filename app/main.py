@@ -1,5 +1,4 @@
 import logging
-from app.middleware.db_session import DBSessionMiddleware
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
@@ -14,6 +13,7 @@ from .routers import (
     contact_list,
     contact_interaction,
     waiting_list,
+    stats,
 )
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from app.telemetry import setup_tracing
@@ -87,6 +87,7 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
     app.include_router(contact_interaction.router)
     app.include_router(contact_interaction.nested_router)
     app.include_router(waiting_list.router)
+    app.include_router(stats.router)
 
     register_exception_handlers(app)
 

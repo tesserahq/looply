@@ -1,6 +1,5 @@
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
-from fastapi.testclient import TestClient
 
 from app.constants.contact_interaction import ContactInteractionAction
 

@@ -2,8 +2,7 @@
 
 import pytest
 from uuid import uuid4
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app.commands.contact_list.unsubscribe_user_command import UnsubscribeUserCommand
 from app.commands.contact_list.subscribe_user_command import SubscribeUserCommand
@@ -52,7 +51,6 @@ def test_unsubscribe_command_success(db, public_contact_list, test_user):
 def test_unsubscribe_command_not_subscribed(db, public_contact_list, test_user):
     """Test unsubscribing when contact is not subscribed."""
     # Create a contact for the user first (contact exists but not subscribed)
-    from app.models.contact import Contact
     from app.schemas.contact import ContactCreate
     from app.services.contact_service import ContactService
 

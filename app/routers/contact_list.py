@@ -16,7 +16,6 @@ from app.schemas.contact_list import (
     AddMembersRequest,
     MemberCountResponse,
     ListMembersResponse,
-    SubscribeRequest,
     SubscribeResponse,
 )
 from app.services.contact_list_service import ContactListService

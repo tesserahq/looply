@@ -1,7 +1,6 @@
 import pytest
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
-from sqlalchemy.orm import Session
 from app.schemas.contact_interaction import (
     ContactInteractionCreate,
     ContactInteractionUpdate,

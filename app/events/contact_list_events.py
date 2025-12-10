@@ -4,8 +4,6 @@ Utilities for building contact list-related CloudEvents payloads.
 
 from __future__ import annotations
 
-from typing import Dict, Any
-from uuid import UUID
 
 from app.models.contact_list import ContactList as ContactListModel
 from app.models.contact_list_member import ContactListMember as ContactListMemberModel

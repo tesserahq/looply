@@ -1,5 +1,4 @@
 from uuid import uuid4
-from sqlalchemy.orm import Session
 from app.services.contact_list_service import ContactListService
 from app.models.contact_list import ContactList
 from app.models.contact import Contact

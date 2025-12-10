@@ -7,7 +7,6 @@ from fastapi_pagination.ext.sqlalchemy import paginate
 from app.db import get_db
 from app.schemas.contact import (
     Contact,
-    ContactCreate,
     ContactCreateRequest,
     ContactUpdate,
 )

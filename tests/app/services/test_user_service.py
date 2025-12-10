@@ -1,7 +1,6 @@
 import pytest
 from uuid import uuid4
 from datetime import datetime
-from sqlalchemy.orm import Session
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.user_service import UserService

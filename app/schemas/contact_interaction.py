@@ -22,6 +22,9 @@ class ContactInteractionBase(BaseModel):
     action: Optional[str] = None
     """Optional action item for follow-up (e.g., 'Follow up in 2 weeks', 'Send proposal')."""
 
+    custom_action_description: Optional[str] = None
+    """Optional custom action description for follow-up (e.g., 'Send proposal')."""
+
     action_timestamp: Optional[datetime] = None
     """Optional timestamp for when the action should be taken."""
 
@@ -51,6 +54,9 @@ class ContactInteractionCreateRequest(BaseModel):
     action: Optional[str] = None
     """Optional action item for follow-up (e.g., 'Follow up in 2 weeks', 'Send proposal')."""
 
+    custom_action_description: Optional[str] = None
+    """Optional custom action description for follow-up (e.g., 'Send proposal')."""
+
     action_timestamp: Optional[datetime] = None
     """Optional timestamp for when the action should be taken."""
 
@@ -66,6 +72,9 @@ class ContactInteractionUpdate(BaseModel):
 
     action: Optional[str] = None
     """Updated action item."""
+
+    custom_action_description: Optional[str] = None
+    """Updated custom action description."""
 
     action_timestamp: Optional[datetime] = None
     """Updated action timestamp."""

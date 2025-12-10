@@ -88,6 +88,33 @@ class TestContactInteractionRouter:
         assert data["action"] == interaction_data["action"]
         assert data["action_timestamp"] is not None
 
+    def test_create_contact_interaction_with_custom_action_description(
+        self, client, test_contact, faker
+    ):
+        """Test POST /contacts/{contact_id}/interactions with action."""
+        interaction_data = {
+            "note": faker.text(max_nb_chars=500),
+            "interaction_timestamp": datetime.now(timezone.utc).isoformat(),
+            "action": ContactInteractionAction.CUSTOM.value,
+            "custom_action_description": faker.text(max_nb_chars=200),
+            "action_timestamp": (
+                datetime.now(timezone.utc) + timedelta(days=7)
+            ).isoformat(),
+        }
+
+        response = client.post(
+            f"/contacts/{test_contact.id}/interactions", json=interaction_data
+        )
+        assert response.status_code == 201
+
+        data = response.json()
+        assert data["action"] == interaction_data["action"]
+        assert (
+            data["custom_action_description"]
+            == interaction_data["custom_action_description"]
+        )
+        assert data["action_timestamp"] is not None
+
     def test_create_contact_interaction_minimal(self, client, test_contact, faker):
         """Test POST /contacts/{contact_id}/interactions with minimal data."""
         interaction_data = {

@@ -36,6 +36,9 @@ class ContactInteraction(Base, TimestampMixin, SoftDeleteMixin):
     action: Mapped[str | None] = mapped_column(String, nullable=True)
     """Optional action item for follow-up (e.g., 'Follow up in 2 weeks', 'Send proposal')."""
 
+    custom_action_description: Mapped[str | None] = mapped_column(String, nullable=True)
+    """Optional custom action description for follow-up (e.g., 'Send proposal')."""
+
     action_timestamp: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

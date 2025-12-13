@@ -61,7 +61,7 @@ extras = [ "standard" ]
 version = "^0.23.2"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
+pytest = "^9.0.0"
 httpx = "^0.28.0"  # Required by FastAPI TestClient
 pytest-asyncio = "^1.0.0"
 

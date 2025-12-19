@@ -903,37 +903,38 @@ standard = ["email-validator (>=2.0.0)", "fastapi-cli[standard] (>=0.0.5)", "htt
 
 [[package]]
 name = "fastapi-pagination"
-version = "0.14.3"
+version = "0.15.4"
 description = "FastAPI pagination"
 optional = false
-python-versions = "<4.0,>=3.9"
+python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "fastapi_pagination-0.14.3-py3-none-any.whl", hash = "sha256:e87350b64010fd3b2df840218b1f65a21eec6078238cd3a1794c2468a03ea45f"},
-    {file = "fastapi_pagination-0.14.3.tar.gz", hash = "sha256:be8e81e21235c0758cbdd2f0e597c65bcb82a85062e2b99a9474418d23006791"},
+    {file = "fastapi_pagination-0.15.4-py3-none-any.whl", hash = "sha256:66d3eb5e28bfb8128a978c3f11c49300c5e914a03b96a24c9f491727e6a8d2d1"},
+    {file = "fastapi_pagination-0.15.4.tar.gz", hash = "sha256:be9be01181399be0a54bdbd9c991b70ed6cde3aa52d543ffd92af76202ee1013"},
 ]
 
 [package.dependencies]
 fastapi = ">=0.93.0"
 pydantic = ">=1.9.1"
-typing-extensions = ">=4.8.0,<5"
+typing-extensions = ">=4.8.0"
 
 [package.extras]
+aiosqlite = ["aiosqlite (>=0.19.0,!=0.22.0)"]
 asyncpg = ["asyncpg (>=0.24.0)", "sqlalchemy (>=1.3.20)"]
 beanie = ["beanie (>=2.0.0)"]
-bunnet = ["bunnet (>=1.1.0,<2)"]
+bunnet = ["bunnet (>=1.1.0)"]
 databases = ["databases (>=0.6.0)"]
 django = ["databases (>=0.6.0)", "django (<6.0.0)"]
-elasticsearch = ["elasticsearch-dsl (>=8.13.0,<9)"]
-firestore = ["google-cloud-firestore (>=2.19.0,<3)"]
-mongoengine = ["mongoengine (>=0.23.1,<0.30.0)"]
-motor = ["motor (>=3.6.0,<4.0.0)"]
-odmantic = ["odmantic (>=1.0.2,<2)"]
+elasticsearch = ["elasticsearch-dsl (>=8.13.0)"]
+firestore = ["google-cloud-firestore (>=2.19.0)"]
+mongoengine = ["mongoengine (>=0.23.1)"]
+motor = ["motor (>=3.6.0)"]
+odmantic = ["odmantic (>=1.0.2)"]
 orm = ["databases (>=0.6.0)", "orm (>=0.3.1)"]
-piccolo = ["piccolo (>=0.89,<1.25)"]
-scylla-driver = ["scylla-driver (>=3.25.6,<4)"]
-sqlalchemy = ["sqlakeyset (>=2.0.1680321678,<3)", "sqlalchemy (>=1.3.20)"]
-sqlmodel = ["sqlakeyset (>=2.0.1680321678,<3)", "sqlmodel (>=0.0.22)"]
+piccolo = ["piccolo (>=0.89)"]
+scylla-driver = ["scylla-driver (>=3.25.6)"]
+sqlalchemy = ["sqlakeyset (>=2.0.1680321678)", "sqlalchemy (>=1.3.20)"]
+sqlmodel = ["sqlakeyset (>=2.0.1680321678)", "sqlmodel (>=0.0.22)"]
 tortoise = ["tortoise-orm (>=0.22.0)"]
 
 [[package]]
@@ -3800,4 +3801,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "58cca6485665ed55fda1630feb82a03f99144d170761681f09bd33efd56aa674"
+content-hash = "31ef57c78f8c18d4817c2897aba9f75a2364295b9159b16be02fa674c6f6ccc1"

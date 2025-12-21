@@ -9,7 +9,7 @@ DEFAULT_TEST_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/loopl
 
 
 class Settings(BaseSettings):
-    app_name: str = "Looply"
+    app_name: str = "looply-api"
     vaulta_api_url: str = Field(
         default="http://localhost:8004", json_schema_extra={"env": "VAULTA_API_URL"}
     )

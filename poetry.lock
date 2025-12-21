@@ -2165,6 +2165,22 @@ opentelemetry-util-http = "0.60b1"
 instruments = ["fastapi (>=0.92,<1.0)"]
 
 [[package]]
+name = "opentelemetry-instrumentation-logging"
+version = "0.60b1"
+description = "OpenTelemetry Logging instrumentation"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "opentelemetry_instrumentation_logging-0.60b1-py3-none-any.whl", hash = "sha256:f2e18cbc7e1dd3628c80e30d243897fdc93c5b7e0c8ae60abd2b9b6a99f82343"},
+    {file = "opentelemetry_instrumentation_logging-0.60b1.tar.gz", hash = "sha256:98f4b9c7aeb9314a30feee7c002c7ea9abea07c90df5f97fb058b850bc45b89a"},
+]
+
+[package.dependencies]
+opentelemetry-api = ">=1.12,<2.0"
+opentelemetry-instrumentation = "0.60b1"
+
+[[package]]
 name = "opentelemetry-instrumentation-sqlalchemy"
 version = "0.60b1"
 description = "OpenTelemetry SQLAlchemy instrumentation"
@@ -4150,4 +4166,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "fea608e081cfacb8ca04efc726bc55d3047e91c4a3b797a2c22f2b63e68e0eb0"
+content-hash = "a4102e8eed334815c4ec4d4b98e9b86017e09863356254b7009a36f02118ed01"

@@ -6,6 +6,8 @@ import rollbar
 from rollbar.logger import RollbarHandler
 from rollbar.contrib.fastapi import ReporterMiddleware as RollbarMiddleware
 from fastapi_pagination import add_pagination
+from app.utils.metrics import PrometheusMiddleware, metrics
+
 
 from .routers import (
     user,
@@ -21,7 +23,17 @@ from app.exceptions.handlers import register_exception_handlers
 from app.core.logging_config import get_logger
 from app.db import db_manager
 
-SKIP_PATHS = ["/health", "/openapi.json", "/docs"]
+SKIP_AUTH_PATHS = ["/health", "/openapi.json", "/docs", "/metrics"]
+
+
+class EndpointFilter(logging.Filter):
+    # Uvicorn endpoint access log filter
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage().find("GET /metrics") == -1
+
+
+# Filter out /endpoint
+logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
 
 
 def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
@@ -63,9 +75,13 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
         app.add_middleware(
             AuthenticationMiddleware,
             identies_base_url=settings.identies_host,
-            skip_paths=SKIP_PATHS,
+            skip_paths=SKIP_AUTH_PATHS,
             user_service_factory=user_service_factory,
         )
+
+        # Setting metrics middleware
+        app.add_middleware(PrometheusMiddleware, app_name=settings.app_name)
+        app.add_route("/metrics", metrics)
 
     else:
         logger.info("Main: No authentication middleware")

@@ -45,8 +45,7 @@ def upgrade() -> None:
 
     # Create text search configuration for unaccented text search
     # Ensure simple_unaccent config exists
-    op.execute(
-        """
+    op.execute("""
         DO $$
         BEGIN
             IF NOT EXISTS (
@@ -57,8 +56,7 @@ def upgrade() -> None:
                     FOR hword, hword_part, word WITH unaccent, simple;
             END IF;
         END$$;
-        """
-    )
+        """)
 
     op.create_table(
         "app_settings",

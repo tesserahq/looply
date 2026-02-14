@@ -100,7 +100,6 @@ def test_unsubscribe_command_contact_not_found(db, public_contact_list, faker):
 
     user_without_contact = UserModel(
         email=faker.email(),
-        username=faker.email(),
         first_name=faker.first_name(),
         last_name=faker.last_name(),
         provider="google",

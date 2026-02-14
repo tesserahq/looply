@@ -48,7 +48,7 @@
 
 ### 👤 User Management
 
-- **User profiles**: Manage user accounts with email, username, and profile information
+- **User profiles**: Manage user accounts with email and profile information
 - **Authentication**: Integrated with Tessera SDK for authentication and authorization
 - **Multi-tenant support**: Each resource is scoped to the creating user
 

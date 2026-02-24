@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from app.services.soft_delete_service import SoftDeleteService
 
 from app.utils.db.filtering import apply_filters
+from sqlalchemy import or_
 
 
 class UserService(SoftDeleteService[User]):
@@ -21,6 +22,18 @@ class UserService(SoftDeleteService[User]):
 
     def get_user_by_external_id(self, external_id: str) -> Optional[User]:
         return self.db.query(User).filter(User.external_id == external_id).first()
+
+    def get_user_by_id_or_external_id(self, id: str) -> User | None:
+        try:
+            uuid_id = UUID(str(id))
+            return (
+                self.db.query(User)
+                .filter(or_(User.id == uuid_id, User.external_id == str(id)))
+                .first()
+            )
+        except (ValueError, TypeError):
+            # Not a valid UUID, only match on external_id
+            return self.db.query(User).filter(User.external_id == str(id)).first()
 
     def get_users(self, skip: int = 0, limit: int = 100) -> List[User]:
         return self.db.query(User).offset(skip).limit(limit).all()

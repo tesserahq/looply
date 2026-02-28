@@ -18,6 +18,25 @@ def test_add_members_to_list(
     assert data["requested_count"] == 1
 
 
+def test_add_duplicate_member_returns_422(
+    client_test_user: TestClient, test_contact_list, test_contact
+):
+    """Adding the same contact twice should return a 422 response."""
+    request_data = {"contact_ids": [str(test_contact.id)]}
+
+    first_response = client_test_user.post(
+        f"/contact-lists/{test_contact_list.id}/members", json=request_data
+    )
+    assert first_response.status_code == 200
+
+    duplicate_response = client_test_user.post(
+        f"/contact-lists/{test_contact_list.id}/members", json=request_data
+    )
+
+    assert duplicate_response.status_code == 422
+    assert "already a member" in duplicate_response.json()["detail"]
+
+
 def test_add_multiple_members_to_list(
     client_test_user: TestClient, test_contact_list, test_contact, faker, test_user, db
 ):

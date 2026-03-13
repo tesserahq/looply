@@ -7,12 +7,12 @@ from app.models.contact_list import ContactList
 from app.models.contact_interaction import ContactInteraction
 
 
-class StatsService:
-    """Service class for retrieving statistics."""
+class StatsRepository:
+    """Repository class for retrieving statistics."""
 
     def __init__(self, db: Session):
         """
-        Initialize the stats service.
+        Initialize the stats repository.
 
         Args:
             db: Database session

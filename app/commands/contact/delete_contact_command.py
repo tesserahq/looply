@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.contact import Contact
 from app.schemas.user import User
-from app.services.contact_service import ContactService
+from app.repositories.contact_repository import ContactRepository
 from app.events.contact_events import build_contact_deleted_event
 from tessera_sdk.events.nats_router import NatsEventPublisher
 
@@ -24,7 +24,7 @@ class DeleteContactCommand:
         nats_publisher: Optional[NatsEventPublisher] = None,
     ):
         self.db = db
-        self.contact_service = ContactService(db)
+        self.contact_repository = ContactRepository(db)
         self.nats_publisher = (
             nats_publisher if nats_publisher is not None else NatsEventPublisher()
         )
@@ -46,12 +46,12 @@ class DeleteContactCommand:
         """
         try:
             # Get contact before deletion for event publishing
-            contact = self.contact_service.get_contact(contact_id)
+            contact = self.contact_repository.get_contact(contact_id)
             if not contact:
                 raise ValueError("Contact not found")
 
             # Delete contact (soft delete)
-            deleted = self.contact_service.delete_contact(contact_id)
+            deleted = self.contact_repository.delete_contact(contact_id)
 
             if not deleted:
                 raise ValueError(f"Failed to delete contact {contact_id}")

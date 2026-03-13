@@ -10,8 +10,8 @@ from app.models.contact_list_member import ContactListMember
 from app.models.contact import Contact
 from app.schemas.user import User
 from app.schemas.contact import ContactCreate
-from app.services.contact_list_service import ContactListService
-from app.services.contact_service import ContactService
+from app.repositories.contact_list_repository import ContactListRepository
+from app.repositories.contact_repository import ContactRepository
 from app.events.contact_list_events import build_contact_subscribed_event
 from tessera_sdk.events.nats_router import NatsEventPublisher
 
@@ -28,8 +28,8 @@ class SubscribeUserCommand:
         nats_publisher: Optional[NatsEventPublisher] = None,
     ):
         self.db = db
-        self.contact_list_service = ContactListService(db)
-        self.contact_service = ContactService(db)
+        self.contact_list_repository = ContactListRepository(db)
+        self.contact_repository = ContactRepository(db)
         self.nats_publisher = (
             nats_publisher if nats_publisher is not None else NatsEventPublisher()
         )
@@ -52,7 +52,9 @@ class SubscribeUserCommand:
         """
         try:
             # Check if contact list exists
-            contact_list = self.contact_list_service.get_contact_list(contact_list_id)
+            contact_list = self.contact_list_repository.get_contact_list(
+                contact_list_id
+            )
             if not contact_list:
                 raise ValueError(f"Contact list {contact_list_id} not found")
 
@@ -61,7 +63,7 @@ class SubscribeUserCommand:
                 raise ValueError("User email is required to subscribe")
 
             # Find or create contact by email
-            contact = self.contact_service.get_contact_by_email(user.email)
+            contact = self.contact_repository.get_contact_by_email(user.email)
 
             if not contact:
                 # Create contact from user information
@@ -73,12 +75,12 @@ class SubscribeUserCommand:
                     phone_type="mobile",  # Default value
                     created_by_id=user.id,
                 )
-                contact = self.contact_service.create_contact(contact_data)
+                contact = self.contact_repository.create_contact(contact_data)
 
             contact_id = contact.id
 
             # Check if member already exists
-            existing_member = self.contact_list_service.get_contact_list_member(
+            existing_member = self.contact_list_repository.get_contact_list_member(
                 contact_list_id, contact_id
             )
 
@@ -87,7 +89,7 @@ class SubscribeUserCommand:
                 return existing_member
 
             # Add contact to list using the service method
-            member = self.contact_list_service.add_contact_to_list(
+            member = self.contact_list_repository.add_contact_to_list(
                 contact_list_id, contact_id
             )
 

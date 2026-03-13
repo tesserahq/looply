@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from app.models.contact_list import ContactList
 from app.models.contact import Contact
 from app.schemas.user import User
-from app.services.contact_list_service import ContactListService
-from app.services.contact_service import ContactService
+from app.repositories.contact_list_repository import ContactListRepository
+from app.repositories.contact_repository import ContactRepository
 from app.events.contact_list_events import build_contact_unsubscribed_event
 from tessera_sdk.events.nats_router import NatsEventPublisher
 
@@ -25,8 +25,8 @@ class UnsubscribeUserCommand:
         nats_publisher: Optional[NatsEventPublisher] = None,
     ):
         self.db = db
-        self.contact_list_service = ContactListService(db)
-        self.contact_service = ContactService(db)
+        self.contact_list_repository = ContactListRepository(db)
+        self.contact_repository = ContactRepository(db)
         self.nats_publisher = (
             nats_publisher if nats_publisher is not None else NatsEventPublisher()
         )
@@ -49,7 +49,9 @@ class UnsubscribeUserCommand:
         """
         try:
             # Check if contact list exists
-            contact_list = self.contact_list_service.get_contact_list(contact_list_id)
+            contact_list = self.contact_list_repository.get_contact_list(
+                contact_list_id
+            )
             if not contact_list:
                 raise ValueError(f"Contact list {contact_list_id} not found")
 
@@ -57,14 +59,14 @@ class UnsubscribeUserCommand:
             if not current_user.email:
                 raise ValueError("User email is required to unsubscribe")
 
-            contact = self.contact_service.get_contact_by_email(current_user.email)
+            contact = self.contact_repository.get_contact_by_email(current_user.email)
             if not contact:
                 raise ValueError(f"Contact with email {current_user.email} not found")
 
             contact_id = contact.id
 
             # Remove contact from list using the service method
-            removed = self.contact_list_service.remove_contact_from_list(
+            removed = self.contact_list_repository.remove_contact_from_list(
                 contact_list_id, contact_id
             )
 

@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 from app.db import get_db
-from app.services.contact_service import ContactService
+from app.repositories.contact_repository import ContactRepository
 from app.models.contact import Contact
 
 
@@ -21,8 +21,8 @@ def get_contact_by_id(contact_id: UUID, db: Session = Depends(get_db)) -> Contac
     Raises:
         HTTPException: 404 if contact not found
     """
-    contact_service = ContactService(db)
-    contact = contact_service.get_contact(contact_id)
+    contact_repository = ContactRepository(db)
+    contact = contact_repository.get_contact(contact_id)
     if not contact:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found"

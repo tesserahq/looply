@@ -6,16 +6,16 @@ from app.schemas.contact_interaction import (
     ContactInteractionCreate,
     ContactInteractionUpdate,
 )
-from app.services.soft_delete_service import SoftDeleteService
+from app.repositories.soft_delete_repository import SoftDeleteRepository
 from app.utils.db.filtering import apply_filters
 
 
-class ContactInteractionService(SoftDeleteService[ContactInteraction]):
-    """Service class for managing contact interaction CRUD operations."""
+class ContactInteractionRepository(SoftDeleteRepository[ContactInteraction]):
+    """Repository class for managing contact interaction CRUD operations."""
 
     def __init__(self, db: Session):
         """
-        Initialize the contact interaction service.
+        Initialize the contact interaction repository.
 
         Args:
             db: Database session

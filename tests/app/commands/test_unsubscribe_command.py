@@ -6,8 +6,8 @@ from datetime import datetime
 
 from app.commands.contact_list.unsubscribe_user_command import UnsubscribeUserCommand
 from app.commands.contact_list.subscribe_user_command import SubscribeUserCommand
-from app.services.contact_list_service import ContactListService
-from app.services.contact_service import ContactService
+from app.repositories.contact_list_repository import ContactListRepository
+from app.repositories.contact_repository import ContactRepository
 from app.models.contact_list_member import ContactListMember
 from app.schemas.user import User
 
@@ -20,11 +20,13 @@ def test_unsubscribe_command_success(db, public_contact_list, test_user):
     subscribe_command.execute(public_contact_list.id, user_schema)
 
     # Verify subscribed
-    service = ContactListService(db)
-    contact_service = ContactService(db)
-    contact = contact_service.get_contact_by_email(test_user.email)
+    contact_list_repository = ContactListRepository(db)
+    contact_repository = ContactRepository(db)
+    contact = contact_repository.get_contact_by_email(test_user.email)
     assert contact is not None
-    assert service.is_contact_in_list(public_contact_list.id, contact.id)
+    assert contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact.id
+    )
 
     # Unsubscribe
     unsubscribe_command = UnsubscribeUserCommand(db)
@@ -32,7 +34,9 @@ def test_unsubscribe_command_success(db, public_contact_list, test_user):
 
     # Assertions
     assert result is True
-    assert not service.is_contact_in_list(public_contact_list.id, contact.id)
+    assert not contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact.id
+    )
 
     # Verify member is soft deleted (need to skip soft delete filter to see it)
     member = (
@@ -52,10 +56,10 @@ def test_unsubscribe_command_not_subscribed(db, public_contact_list, test_user):
     """Test unsubscribing when contact is not subscribed."""
     # Create a contact for the user first (contact exists but not subscribed)
     from app.schemas.contact import ContactCreate
-    from app.services.contact_service import ContactService
+    from app.repositories.contact_repository import ContactRepository
 
-    contact_service = ContactService(db)
-    contact = contact_service.get_contact_by_email(test_user.email)
+    contact_repository = ContactRepository(db)
+    contact = contact_repository.get_contact_by_email(test_user.email)
     if not contact:
         # Create contact if it doesn't exist
         contact_data = ContactCreate(
@@ -66,11 +70,13 @@ def test_unsubscribe_command_not_subscribed(db, public_contact_list, test_user):
             phone_type="mobile",
             created_by_id=test_user.id,
         )
-        contact = contact_service.create_contact(contact_data)
+        contact = contact_repository.create_contact(contact_data)
 
     # Verify not subscribed
-    service = ContactListService(db)
-    assert not service.is_contact_in_list(public_contact_list.id, contact.id)
+    contact_list_repository = ContactListRepository(db)
+    assert not contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact.id
+    )
 
     # Try to unsubscribe
     command = UnsubscribeUserCommand(db)
@@ -124,8 +130,8 @@ def test_unsubscribe_command_multiple_contacts(
     """Test unsubscribing multiple contacts from the same list."""
     subscribe_command = SubscribeUserCommand(db)
     unsubscribe_command = UnsubscribeUserCommand(db)
-    service = ContactListService(db)
-    contact_service = ContactService(db)
+    contact_list_repository = ContactListRepository(db)
+    contact_repository = ContactRepository(db)
 
     # Subscribe both users
     user1_schema = User.model_validate(test_user)
@@ -134,25 +140,35 @@ def test_unsubscribe_command_multiple_contacts(
     subscribe_command.execute(public_contact_list.id, user2_schema)
 
     # Get contacts
-    contact1 = contact_service.get_contact_by_email(test_user.email)
-    contact2 = contact_service.get_contact_by_email(setup_user.email)
+    contact1 = contact_repository.get_contact_by_email(test_user.email)
+    contact2 = contact_repository.get_contact_by_email(setup_user.email)
     assert contact1 is not None
     assert contact2 is not None
 
     # Verify both are subscribed
-    assert service.is_contact_in_list(public_contact_list.id, contact1.id)
-    assert service.is_contact_in_list(public_contact_list.id, contact2.id)
+    assert contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact1.id
+    )
+    assert contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact2.id
+    )
 
     # Unsubscribe first contact
     result1 = unsubscribe_command.execute(public_contact_list.id, user1_schema)
     assert result1 is True
-    assert not service.is_contact_in_list(public_contact_list.id, contact1.id)
-    assert service.is_contact_in_list(public_contact_list.id, contact2.id)
+    assert not contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact1.id
+    )
+    assert contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact2.id
+    )
 
     # Unsubscribe second contact
     result2 = unsubscribe_command.execute(public_contact_list.id, user2_schema)
     assert result2 is True
-    assert not service.is_contact_in_list(public_contact_list.id, contact2.id)
+    assert not contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact2.id
+    )
 
 
 def test_unsubscribe_command_soft_deletes_member(db, public_contact_list, test_user):
@@ -183,23 +199,29 @@ def test_unsubscribe_command_after_resubscribe(db, public_contact_list, test_use
     """Test that you can resubscribe after unsubscribing."""
     subscribe_command = SubscribeUserCommand(db)
     unsubscribe_command = UnsubscribeUserCommand(db)
-    service = ContactListService(db)
-    contact_service = ContactService(db)
+    contact_list_repository = ContactListRepository(db)
+    contact_repository = ContactRepository(db)
     user_schema = User.model_validate(test_user)
 
     # Subscribe
     member1 = subscribe_command.execute(public_contact_list.id, user_schema)
-    contact = contact_service.get_contact_by_email(test_user.email)
+    contact = contact_repository.get_contact_by_email(test_user.email)
     assert contact is not None
-    assert service.is_contact_in_list(public_contact_list.id, contact.id)
+    assert contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact.id
+    )
 
     # Unsubscribe
     unsubscribe_command.execute(public_contact_list.id, user_schema)
-    assert not service.is_contact_in_list(public_contact_list.id, contact.id)
+    assert not contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact.id
+    )
 
     # Resubscribe
     member2 = subscribe_command.execute(public_contact_list.id, user_schema)
-    assert service.is_contact_in_list(public_contact_list.id, contact.id)
+    assert contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact.id
+    )
 
     # Should restore the soft-deleted member (same ID)
     assert member2 is not None

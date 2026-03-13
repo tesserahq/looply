@@ -12,7 +12,7 @@ from app.schemas.contact_interaction import (
     ContactInteractionCreateRequest,
     ContactInteractionUpdate,
 )
-from app.services.contact_interaction_service import ContactInteractionService
+from app.repositories.contact_interaction_repository import ContactInteractionRepository
 from app.schemas.user import User
 from app.routers.utils.dependencies import get_contact_by_id
 from app.models.contact import Contact
@@ -50,8 +50,8 @@ def list_actions():
 @router.get("/pending-actions", response_model=Page[ContactInteraction])
 def get_pending_actions(db: Session = Depends(get_db)):
     """Get all pending actions across all contacts."""
-    interaction_service = ContactInteractionService(db)
-    return paginate(db, interaction_service.get_pending_actions_query())
+    interaction_repository = ContactInteractionRepository(db)
+    return paginate(db, interaction_repository.get_pending_actions_query())
 
 
 @nested_router.post(
@@ -64,7 +64,7 @@ def create_contact_interaction(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new interaction for a contact."""
-    interaction_service = ContactInteractionService(db)
+    interaction_repository = ContactInteractionRepository(db)
 
     # Set interaction_timestamp to current time if not provided
     interaction_timestamp = (
@@ -80,7 +80,7 @@ def create_contact_interaction(
         created_by_id=current_user.id,
     )
 
-    return interaction_service.create_contact_interaction(interaction)
+    return interaction_repository.create_contact_interaction(interaction)
 
 
 @nested_router.get("", response_model=Page[ContactInteraction])
@@ -89,9 +89,9 @@ def list_contact_interactions(
     db: Session = Depends(get_db),
 ):
     """List all interactions for a specific contact with pagination."""
-    interaction_service = ContactInteractionService(db)
+    interaction_repository = ContactInteractionRepository(db)
     return paginate(
-        db, interaction_service.get_interactions_by_contact_query(contact.id)
+        db, interaction_repository.get_interactions_by_contact_query(contact.id)
     )
 
 
@@ -101,8 +101,8 @@ def get_last_contact_interaction(
     db: Session = Depends(get_db),
 ):
     """Get the most recent interaction for a contact."""
-    interaction_service = ContactInteractionService(db)
-    last_interaction = interaction_service.get_last_interaction(contact.id)
+    interaction_repository = ContactInteractionRepository(db)
+    last_interaction = interaction_repository.get_last_interaction(contact.id)
     if not last_interaction:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -115,7 +115,9 @@ def get_last_contact_interaction(
 @router.get("/{interaction_id}", response_model=ContactInteraction)
 def get_contact_interaction(interaction_id: UUID, db: Session = Depends(get_db)):
     """Get a contact interaction by ID."""
-    interaction = ContactInteractionService(db).get_contact_interaction(interaction_id)
+    interaction = ContactInteractionRepository(db).get_contact_interaction(
+        interaction_id
+    )
     if not interaction:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -131,7 +133,7 @@ def update_contact_interaction(
     db: Session = Depends(get_db),
 ):
     """Update a contact interaction."""
-    updated_interaction = ContactInteractionService(db).update_contact_interaction(
+    updated_interaction = ContactInteractionRepository(db).update_contact_interaction(
         interaction_id, interaction
     )
     if not updated_interaction:
@@ -145,7 +147,7 @@ def update_contact_interaction(
 @router.delete("/{interaction_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_contact_interaction(interaction_id: UUID, db: Session = Depends(get_db)):
     """Delete a contact interaction."""
-    if not ContactInteractionService(db).delete_contact_interaction(interaction_id):
+    if not ContactInteractionRepository(db).delete_contact_interaction(interaction_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Contact interaction not found",
@@ -155,5 +157,5 @@ def delete_contact_interaction(interaction_id: UUID, db: Session = Depends(get_d
 @router.get("", response_model=Page[ContactInteraction])
 def list_contact_interactions_global(db: Session = Depends(get_db)):
     """List all contact interactions with pagination."""
-    interaction_service = ContactInteractionService(db)
-    return paginate(db, interaction_service.get_contact_interactions_query())
+    interaction_repository = ContactInteractionRepository(db)
+    return paginate(db, interaction_repository.get_contact_interactions_query())

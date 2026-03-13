@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.contact import Contact
 from app.schemas.contact import ContactUpdate
 from app.schemas.user import User
-from app.services.contact_service import ContactService
+from app.repositories.contact_repository import ContactRepository
 from app.events.contact_events import build_contact_updated_event
 from tessera_sdk.events.nats_router import NatsEventPublisher
 
@@ -25,7 +25,7 @@ class UpdateContactCommand:
         nats_publisher: Optional[NatsEventPublisher] = None,
     ):
         self.db = db
-        self.contact_service = ContactService(db)
+        self.contact_repository = ContactRepository(db)
         self.nats_publisher = (
             nats_publisher if nats_publisher is not None else NatsEventPublisher()
         )
@@ -52,13 +52,13 @@ class UpdateContactCommand:
         """
         try:
             # Check if contact exists
-            existing_contact = self.contact_service.get_contact(contact_id)
+            existing_contact = self.contact_repository.get_contact(contact_id)
             if not existing_contact:
                 raise ValueError("Contact not found")
 
             # Check if email is being updated and already exists
             if contact_data.email:
-                contact_with_email = self.contact_service.get_contact_by_email(
+                contact_with_email = self.contact_repository.get_contact_by_email(
                     contact_data.email
                 )
                 if contact_with_email and contact_with_email.id != contact_id:
@@ -66,14 +66,14 @@ class UpdateContactCommand:
 
             # Check if phone is being updated and already exists
             if contact_data.phone:
-                contact_with_phone = self.contact_service.get_contact_by_phone(
+                contact_with_phone = self.contact_repository.get_contact_by_phone(
                     contact_data.phone
                 )
                 if contact_with_phone and contact_with_phone.id != contact_id:
                     raise ValueError("Phone number already registered")
 
             # Update contact
-            updated_contact = self.contact_service.update_contact(
+            updated_contact = self.contact_repository.update_contact(
                 contact_id, contact_data
             )
 

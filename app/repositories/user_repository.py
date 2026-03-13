@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate, UserOnboard
 from datetime import datetime, timezone
-from app.services.soft_delete_service import SoftDeleteService
+from app.repositories.soft_delete_repository import SoftDeleteRepository
 
 from app.utils.db.filtering import apply_filters
 from sqlalchemy import or_
 
 
-class UserService(SoftDeleteService[User]):
+class UserRepository(SoftDeleteRepository[User]):
     def __init__(self, db: Session):
         super().__init__(db, User)
 

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.contact import Contact
 from app.schemas.contact import ContactCreate, ContactCreateRequest
-from app.services.contact_service import ContactService
+from app.repositories.contact_repository import ContactRepository
 from app.events.contact_events import build_contact_created_event
 from tessera_sdk.events.nats_router import NatsEventPublisher
 
@@ -24,7 +24,7 @@ class BatchCreateContactsCommand:
         nats_publisher: Optional[NatsEventPublisher] = None,
     ):
         self.db = db
-        self.contact_service = ContactService(db)
+        self.contact_repository = ContactRepository(db)
         self.nats_publisher = (
             nats_publisher if nats_publisher is not None else NatsEventPublisher()
         )
@@ -62,7 +62,7 @@ class BatchCreateContactsCommand:
             ]
 
             # Bulk create all contacts
-            created_contacts = self.contact_service.bulk_create_contacts(
+            created_contacts = self.contact_repository.bulk_create_contacts(
                 contact_creates
             )
 
@@ -110,7 +110,7 @@ class BatchCreateContactsCommand:
                 batch_emails.add(contact_data.email)
 
                 # Check if email already exists in database
-                if self.contact_service.get_contact_by_email(contact_data.email):
+                if self.contact_repository.get_contact_by_email(contact_data.email):
                     raise ValueError(
                         f"Email '{contact_data.email}' already registered (position {idx})"
                     )
@@ -124,7 +124,7 @@ class BatchCreateContactsCommand:
                 batch_phones.add(contact_data.phone)
 
                 # Check if phone already exists in database
-                if self.contact_service.get_contact_by_phone(contact_data.phone):
+                if self.contact_repository.get_contact_by_phone(contact_data.phone):
                     raise ValueError(
                         f"Phone number '{contact_data.phone}' already registered (position {idx})"
                     )

@@ -4,16 +4,16 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.contact import Contact
 from app.schemas.contact import ContactCreate, ContactUpdate
-from app.services.soft_delete_service import SoftDeleteService
+from app.repositories.soft_delete_repository import SoftDeleteRepository
 from app.utils.db.filtering import apply_filters
 
 
-class ContactService(SoftDeleteService[Contact]):
-    """Service class for managing contact CRUD operations."""
+class ContactRepository(SoftDeleteRepository[Contact]):
+    """Repository class for managing contact CRUD operations."""
 
     def __init__(self, db: Session):
         """
-        Initialize the contact service.
+        Initialize the contact repository.
 
         Args:
             db: Database session

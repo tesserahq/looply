@@ -5,17 +5,17 @@ from app.models.waiting_list import WaitingList
 from app.models.waiting_list_member import WaitingListMember
 from app.models.contact import Contact
 from app.schemas.waiting_list import WaitingListCreate, WaitingListUpdate
-from app.services.soft_delete_service import SoftDeleteService
+from app.repositories.soft_delete_repository import SoftDeleteRepository
 from app.utils.db.filtering import apply_filters
 from app.constants.waiting_list import WaitingListMemberStatus
 
 
-class WaitingListService(SoftDeleteService[WaitingList]):
-    """Service class for managing waiting list CRUD operations."""
+class WaitingListRepository(SoftDeleteRepository[WaitingList]):
+    """Repository class for managing waiting list CRUD operations."""
 
     def __init__(self, db: Session):
         """
-        Initialize the waiting list service.
+        Initialize the waiting list repository.
 
         Args:
             db: Database session

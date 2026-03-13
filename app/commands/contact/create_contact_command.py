@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.contact import Contact
 from app.schemas.contact import ContactCreate, ContactCreateRequest
-from app.services.contact_service import ContactService
+from app.repositories.contact_repository import ContactRepository
 from app.events.contact_events import build_contact_created_event
 from tessera_sdk.events.nats_router import NatsEventPublisher
 
@@ -24,7 +24,7 @@ class CreateContactCommand:
         nats_publisher: Optional[NatsEventPublisher] = None,
     ):
         self.db = db
-        self.contact_service = ContactService(db)
+        self.contact_repository = ContactRepository(db)
         self.nats_publisher = (
             nats_publisher if nats_publisher is not None else NatsEventPublisher()
         )
@@ -49,13 +49,13 @@ class CreateContactCommand:
         """
         try:
             # Check if email already exists
-            if contact_data.email and self.contact_service.get_contact_by_email(
+            if contact_data.email and self.contact_repository.get_contact_by_email(
                 contact_data.email
             ):
                 raise ValueError("Email already registered")
 
             # Check if phone already exists
-            if contact_data.phone and self.contact_service.get_contact_by_phone(
+            if contact_data.phone and self.contact_repository.get_contact_by_phone(
                 contact_data.phone
             ):
                 raise ValueError("Phone number already registered")
@@ -66,7 +66,7 @@ class CreateContactCommand:
                 created_by_id=created_by_id,
             )
 
-            contact = self.contact_service.create_contact(contact_create)
+            contact = self.contact_repository.create_contact(contact_create)
 
             if not contact:
                 raise ValueError("Failed to create contact")

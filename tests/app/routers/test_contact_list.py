@@ -271,8 +271,8 @@ def test_get_my_subscriptions_only_public_lists(
 ):
     """Test that subscriptions only returns public lists, not private ones."""
     from app.commands.contact_list.subscribe_user_command import SubscribeUserCommand
-    from app.services.contact_list_service import ContactListService
-    from app.services.contact_service import ContactService
+    from app.repositories.contact_list_repository import ContactListRepository
+    from app.repositories.contact_repository import ContactRepository
     from app.schemas.user import User
 
     # Subscribe user to public contact list
@@ -281,12 +281,12 @@ def test_get_my_subscriptions_only_public_lists(
     subscribe_command.execute(public_contact_list.id, user_schema)
 
     # Add user's contact to private contact list (not via subscription)
-    contact_service = ContactService(db)
-    contact = contact_service.get_contact_by_email(test_user.email)
+    contact_repository = ContactRepository(db)
+    contact = contact_repository.get_contact_by_email(test_user.email)
     assert contact is not None
 
-    contact_list_service = ContactListService(db)
-    contact_list_service.add_contact_to_list(test_contact_list.id, contact.id)
+    contact_list_repository = ContactListRepository(db)
+    contact_list_repository.add_contact_to_list(test_contact_list.id, contact.id)
 
     # Get my subscriptions - should only return public list
     response = client_test_user.get("/contact-lists/subscriptions")

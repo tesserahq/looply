@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.schemas.stats import Stats, ContactInteractionWithContact, ContactSummary
 from app.schemas.common import DataResponse
-from app.services.stats_service import StatsService
+from app.repositories.stats_repository import StatsRepository
 
 router = APIRouter(
     prefix="/stats",
@@ -15,14 +15,14 @@ router = APIRouter(
 @router.get("", response_model=DataResponse[Stats])
 def get_stats(db: Session = Depends(get_db)):
     """Get statistics about contacts, lists, and upcoming interactions."""
-    stats_service = StatsService(db)
+    stats_repository = StatsRepository(db)
 
-    number_of_contacts = stats_service.get_number_of_contacts()
-    number_of_lists = stats_service.get_number_of_lists()
-    number_of_public_lists = stats_service.get_number_of_public_lists()
-    number_of_private_lists = stats_service.get_number_of_private_lists()
-    interactions_with_contacts = stats_service.get_upcoming_interactions()
-    recent_contacts = stats_service.get_last_contacts(limit=5)
+    number_of_contacts = stats_repository.get_number_of_contacts()
+    number_of_lists = stats_repository.get_number_of_lists()
+    number_of_public_lists = stats_repository.get_number_of_public_lists()
+    number_of_private_lists = stats_repository.get_number_of_private_lists()
+    interactions_with_contacts = stats_repository.get_upcoming_interactions()
+    recent_contacts = stats_repository.get_last_contacts(limit=5)
 
     # Construct ContactInteractionWithContact objects with nested contact
     upcoming_interactions = []

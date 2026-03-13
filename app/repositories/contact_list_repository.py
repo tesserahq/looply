@@ -5,16 +5,16 @@ from app.models.contact_list import ContactList
 from app.models.contact_list_member import ContactListMember
 from app.models.contact import Contact
 from app.schemas.contact_list import ContactListCreate, ContactListUpdate
-from app.services.soft_delete_service import SoftDeleteService
+from app.repositories.soft_delete_repository import SoftDeleteRepository
 from app.utils.db.filtering import apply_filters
 
 
-class ContactListService(SoftDeleteService[ContactList]):
-    """Service class for managing contact list CRUD operations."""
+class ContactListRepository(SoftDeleteRepository[ContactList]):
+    """Repository class for managing contact list CRUD operations."""
 
     def __init__(self, db: Session):
         """
-        Initialize the contact list service.
+        Initialize the contact list repository.
 
         Args:
             db: Database session

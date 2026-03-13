@@ -5,7 +5,7 @@ from app.schemas.contact_interaction import (
     ContactInteractionCreate,
     ContactInteractionUpdate,
 )
-from app.services.contact_interaction_service import ContactInteractionService
+from app.repositories.contact_interaction_repository import ContactInteractionRepository
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def minimal_interaction_data(faker, test_user, test_contact):
 def test_create_contact_interaction(db, sample_interaction_data):
     """Test creating a contact interaction with full data."""
     interaction_create = ContactInteractionCreate(**sample_interaction_data)
-    interaction = ContactInteractionService(db).create_contact_interaction(
+    interaction = ContactInteractionRepository(db).create_contact_interaction(
         interaction_create
     )
 
@@ -55,7 +55,7 @@ def test_create_contact_interaction(db, sample_interaction_data):
 def test_create_contact_interaction_minimal_data(db, minimal_interaction_data):
     """Test creating a contact interaction with minimal required data."""
     interaction_create = ContactInteractionCreate(**minimal_interaction_data)
-    interaction = ContactInteractionService(db).create_contact_interaction(
+    interaction = ContactInteractionRepository(db).create_contact_interaction(
         interaction_create
     )
 
@@ -72,7 +72,7 @@ def test_create_contact_interaction_minimal_data(db, minimal_interaction_data):
 
 def test_get_contact_interaction(db, test_contact_interaction):
     """Test retrieving a contact interaction by ID."""
-    retrieved_interaction = ContactInteractionService(db).get_contact_interaction(
+    retrieved_interaction = ContactInteractionRepository(db).get_contact_interaction(
         test_contact_interaction.id
     )
 
@@ -85,7 +85,7 @@ def test_get_contact_interaction(db, test_contact_interaction):
 
 def test_get_contact_interactions(db, test_contact_interaction):
     """Test retrieving all contact interactions with pagination."""
-    interactions = ContactInteractionService(db).get_contact_interactions()
+    interactions = ContactInteractionRepository(db).get_contact_interactions()
 
     # Assertions
     assert len(interactions) >= 1
@@ -96,14 +96,14 @@ def test_get_contact_interactions_with_pagination(
     db, multiple_interactions_for_contact
 ):
     """Test retrieving contact interactions with pagination."""
-    service = ContactInteractionService(db)
+    repository = ContactInteractionRepository(db)
 
     # Get first page
-    interactions_page1 = service.get_contact_interactions(skip=0, limit=2)
+    interactions_page1 = repository.get_contact_interactions(skip=0, limit=2)
     assert len(interactions_page1) == 2
 
     # Get second page
-    interactions_page2 = service.get_contact_interactions(skip=2, limit=2)
+    interactions_page2 = repository.get_contact_interactions(skip=2, limit=2)
     assert len(interactions_page2) == 2
 
     # Verify they're different
@@ -114,7 +114,7 @@ def test_get_contact_interactions_with_pagination(
 
 def test_get_interactions_by_contact(db, test_contact, test_contact_interaction):
     """Test retrieving interactions for a specific contact."""
-    interactions = ContactInteractionService(db).get_interactions_by_contact(
+    interactions = ContactInteractionRepository(db).get_interactions_by_contact(
         test_contact.id
     )
 
@@ -126,7 +126,7 @@ def test_get_interactions_by_contact(db, test_contact, test_contact_interaction)
 
 def test_get_interactions_by_contact_empty(db, setup_contact):
     """Test retrieving interactions for a contact with no interactions."""
-    interactions = ContactInteractionService(db).get_interactions_by_contact(
+    interactions = ContactInteractionRepository(db).get_interactions_by_contact(
         setup_contact.id
     )
 
@@ -136,7 +136,7 @@ def test_get_interactions_by_contact_empty(db, setup_contact):
 
 def test_get_last_interaction(db, test_contact, multiple_interactions_for_contact):
     """Test retrieving the most recent interaction for a contact."""
-    last_interaction = ContactInteractionService(db).get_last_interaction(
+    last_interaction = ContactInteractionRepository(db).get_last_interaction(
         test_contact.id
     )
 
@@ -148,7 +148,7 @@ def test_get_last_interaction(db, test_contact, multiple_interactions_for_contac
 
 def test_get_last_interaction_none(db, setup_contact):
     """Test retrieving last interaction for a contact with no interactions."""
-    last_interaction = ContactInteractionService(db).get_last_interaction(
+    last_interaction = ContactInteractionRepository(db).get_last_interaction(
         setup_contact.id
     )
 
@@ -163,7 +163,7 @@ def test_get_pending_actions(
     interaction_with_no_action_timestamp,
 ):
     """Test retrieving all pending actions."""
-    pending_actions = ContactInteractionService(db).get_pending_actions()
+    pending_actions = ContactInteractionRepository(db).get_pending_actions()
 
     # Assertions
     assert len(pending_actions) >= 2
@@ -182,7 +182,7 @@ def test_get_pending_actions_by_contact(
     interaction_with_no_action_timestamp,
 ):
     """Test retrieving pending actions for a specific contact."""
-    pending_actions = ContactInteractionService(db).get_pending_actions_by_contact(
+    pending_actions = ContactInteractionRepository(db).get_pending_actions_by_contact(
         test_contact.id
     )
 
@@ -195,7 +195,7 @@ def test_get_pending_actions_by_contact(
 
 def test_get_pending_actions_by_contact_empty(db, setup_contact):
     """Test retrieving pending actions for a contact with no pending actions."""
-    pending_actions = ContactInteractionService(db).get_pending_actions_by_contact(
+    pending_actions = ContactInteractionRepository(db).get_pending_actions_by_contact(
         setup_contact.id
     )
 
@@ -213,7 +213,7 @@ def test_update_contact_interaction(db, test_contact_interaction):
     interaction_update = ContactInteractionUpdate(**update_data)
 
     # Update interaction
-    updated_interaction = ContactInteractionService(db).update_contact_interaction(
+    updated_interaction = ContactInteractionRepository(db).update_contact_interaction(
         test_contact_interaction.id, interaction_update
     )
 
@@ -234,7 +234,7 @@ def test_update_contact_interaction_partial(db, test_contact_interaction):
     interaction_update = ContactInteractionUpdate(**update_data)
 
     # Update interaction
-    updated_interaction = ContactInteractionService(db).update_contact_interaction(
+    updated_interaction = ContactInteractionRepository(db).update_contact_interaction(
         test_contact_interaction.id, interaction_update
     )
 
@@ -253,7 +253,7 @@ def test_update_contact_interaction_clear_action(db, setup_contact_interaction):
     interaction_update = ContactInteractionUpdate(**update_data)
 
     # Update interaction
-    updated_interaction = ContactInteractionService(db).update_contact_interaction(
+    updated_interaction = ContactInteractionRepository(db).update_contact_interaction(
         setup_contact_interaction.id, interaction_update
     )
 
@@ -265,16 +265,16 @@ def test_update_contact_interaction_clear_action(db, setup_contact_interaction):
 
 def test_delete_contact_interaction(db, test_contact_interaction):
     """Test soft deleting a contact interaction."""
-    interaction_service = ContactInteractionService(db)
+    interaction_repository = ContactInteractionRepository(db)
 
     # Delete interaction
-    success = interaction_service.delete_contact_interaction(
+    success = interaction_repository.delete_contact_interaction(
         test_contact_interaction.id
     )
 
     # Assertions
     assert success is True
-    deleted_interaction = interaction_service.get_contact_interaction(
+    deleted_interaction = interaction_repository.get_contact_interaction(
         test_contact_interaction.id
     )
     assert deleted_interaction is None
@@ -282,45 +282,45 @@ def test_delete_contact_interaction(db, test_contact_interaction):
 
 def test_contact_interaction_not_found_cases(db):
     """Test various not found cases."""
-    interaction_service = ContactInteractionService(db)
+    interaction_repository = ContactInteractionRepository(db)
     non_existent_id = uuid4()
 
     # Get non-existent interaction
-    assert interaction_service.get_contact_interaction(non_existent_id) is None
+    assert interaction_repository.get_contact_interaction(non_existent_id) is None
 
     # Update non-existent interaction
     update_data = {"note": "Updated"}
     interaction_update = ContactInteractionUpdate(**update_data)
     assert (
-        interaction_service.update_contact_interaction(
+        interaction_repository.update_contact_interaction(
             non_existent_id, interaction_update
         )
         is None
     )
 
     # Delete non-existent interaction
-    assert interaction_service.delete_contact_interaction(non_existent_id) is False
+    assert interaction_repository.delete_contact_interaction(non_existent_id) is False
 
 
 def test_search_interactions_with_filters(db, test_contact_interaction):
     """Test searching interactions with dynamic filters."""
     # Search by contact_id
     filters = {"contact_id": str(test_contact_interaction.contact_id)}
-    results = ContactInteractionService(db).search(filters)
+    results = ContactInteractionRepository(db).search(filters)
 
     assert isinstance(results, list)
     assert any(interaction.id == test_contact_interaction.id for interaction in results)
 
     # Search with no match
     filters = {"contact_id": str(uuid4())}
-    results = ContactInteractionService(db).search(filters)
+    results = ContactInteractionRepository(db).search(filters)
 
     assert len(results) == 0
 
 
 def test_get_contact_interactions_query(db, test_contact_interaction):
     """Test getting the query object for contact interactions."""
-    query = ContactInteractionService(db).get_contact_interactions_query()
+    query = ContactInteractionRepository(db).get_contact_interactions_query()
 
     # Assertions
     assert query is not None
@@ -331,7 +331,7 @@ def test_get_contact_interactions_query(db, test_contact_interaction):
 
 def test_get_interactions_by_contact_query(db, test_contact, test_contact_interaction):
     """Test getting the query object for interactions by contact."""
-    query = ContactInteractionService(db).get_interactions_by_contact_query(
+    query = ContactInteractionRepository(db).get_interactions_by_contact_query(
         test_contact.id
     )
 
@@ -347,7 +347,7 @@ def test_interactions_ordered_by_timestamp(
     db, test_contact, multiple_interactions_for_contact
 ):
     """Test that interactions are ordered by timestamp (most recent first)."""
-    interactions = ContactInteractionService(db).get_interactions_by_contact(
+    interactions = ContactInteractionRepository(db).get_interactions_by_contact(
         test_contact.id
     )
 
@@ -364,7 +364,7 @@ def test_pending_actions_ordered_by_timestamp(
     interaction_with_no_action_timestamp,
 ):
     """Test that pending actions are ordered by action_timestamp (ascending, nulls last)."""
-    pending_actions = ContactInteractionService(db).get_pending_actions()
+    pending_actions = ContactInteractionRepository(db).get_pending_actions()
 
     # Assertions
     assert len(pending_actions) >= 2
@@ -386,20 +386,21 @@ def test_pending_actions_ordered_by_timestamp(
 
 def test_restore_contact_interaction(db, test_contact_interaction):
     """Test restoring a soft-deleted contact interaction."""
-    interaction_service = ContactInteractionService(db)
+    interaction_repository = ContactInteractionRepository(db)
 
     # First delete the interaction
-    interaction_service.delete_contact_interaction(test_contact_interaction.id)
+    interaction_repository.delete_contact_interaction(test_contact_interaction.id)
     assert (
-        interaction_service.get_contact_interaction(test_contact_interaction.id) is None
+        interaction_repository.get_contact_interaction(test_contact_interaction.id)
+        is None
     )
 
     # Then restore it
-    success = interaction_service.restore_record(test_contact_interaction.id)
+    success = interaction_repository.restore_record(test_contact_interaction.id)
     assert success is True
 
     # Verify it's restored
-    restored_interaction = interaction_service.get_contact_interaction(
+    restored_interaction = interaction_repository.get_contact_interaction(
         test_contact_interaction.id
     )
     assert restored_interaction is not None
@@ -408,14 +409,14 @@ def test_restore_contact_interaction(db, test_contact_interaction):
 
 def test_hard_delete_contact_interaction(db, test_contact_interaction):
     """Test hard deleting a contact interaction."""
-    interaction_service = ContactInteractionService(db)
+    interaction_repository = ContactInteractionRepository(db)
 
     # Hard delete the interaction
-    success = interaction_service.hard_delete_record(test_contact_interaction.id)
+    success = interaction_repository.hard_delete_record(test_contact_interaction.id)
     assert success is True
 
     # Verify it's permanently deleted
-    deleted_interaction = interaction_service.get_contact_interaction(
+    deleted_interaction = interaction_repository.get_contact_interaction(
         test_contact_interaction.id
     )
     assert deleted_interaction is None
@@ -423,12 +424,12 @@ def test_hard_delete_contact_interaction(db, test_contact_interaction):
 
 def test_get_deleted_interactions(db, test_contact_interaction):
     """Test getting soft-deleted interactions."""
-    interaction_service = ContactInteractionService(db)
+    interaction_repository = ContactInteractionRepository(db)
 
     # Delete the interaction
-    interaction_service.delete_contact_interaction(test_contact_interaction.id)
+    interaction_repository.delete_contact_interaction(test_contact_interaction.id)
 
     # Get deleted interactions
-    deleted_interactions = interaction_service.get_deleted_records()
+    deleted_interactions = interaction_repository.get_deleted_records()
     assert len(deleted_interactions) >= 1
     assert any(i.id == test_contact_interaction.id for i in deleted_interactions)

@@ -2,7 +2,7 @@ import pytest
 from uuid import uuid4
 from datetime import datetime
 from app.schemas.contact_list import ContactListCreate, ContactListUpdate
-from app.services.contact_list_service import ContactListService
+from app.repositories.contact_list_repository import ContactListRepository
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def minimal_contact_list_data(faker, test_user):
 def test_create_contact_list(db, sample_contact_list_data):
     """Test creating a contact list with full data."""
     contact_list_create = ContactListCreate(**sample_contact_list_data)
-    contact_list = ContactListService(db).create_contact_list(contact_list_create)
+    contact_list = ContactListRepository(db).create_contact_list(contact_list_create)
 
     # Assertions
     assert contact_list.id is not None
@@ -39,7 +39,7 @@ def test_create_contact_list(db, sample_contact_list_data):
 def test_create_contact_list_minimal_data(db, minimal_contact_list_data):
     """Test creating a contact list with minimal required data."""
     contact_list_create = ContactListCreate(**minimal_contact_list_data)
-    contact_list = ContactListService(db).create_contact_list(contact_list_create)
+    contact_list = ContactListRepository(db).create_contact_list(contact_list_create)
 
     # Assertions
     assert contact_list.id is not None
@@ -52,7 +52,7 @@ def test_create_contact_list_minimal_data(db, minimal_contact_list_data):
 
 def test_get_contact_list(db, test_contact_list):
     """Test retrieving a contact list by ID."""
-    retrieved_contact_list = ContactListService(db).get_contact_list(
+    retrieved_contact_list = ContactListRepository(db).get_contact_list(
         test_contact_list.id
     )
 
@@ -65,7 +65,7 @@ def test_get_contact_list(db, test_contact_list):
 
 def test_get_contact_lists(db, test_contact_list):
     """Test retrieving all contact lists with pagination."""
-    contact_lists = ContactListService(db).get_contact_lists()
+    contact_lists = ContactListRepository(db).get_contact_lists()
 
     # Assertions
     assert len(contact_lists) >= 1
@@ -74,7 +74,7 @@ def test_get_contact_lists(db, test_contact_list):
 
 def test_get_contact_lists_by_creator(db, test_contact_list):
     """Test retrieving contact lists by creator."""
-    contact_lists = ContactListService(db).get_contact_lists_by_creator(
+    contact_lists = ContactListRepository(db).get_contact_lists_by_creator(
         test_contact_list.created_by_id
     )
 
@@ -95,7 +95,7 @@ def test_update_contact_list(db, test_contact_list):
     contact_list_update = ContactListUpdate(**update_data)
 
     # Update contact list
-    updated_contact_list = ContactListService(db).update_contact_list(
+    updated_contact_list = ContactListRepository(db).update_contact_list(
         test_contact_list.id, contact_list_update
     )
 
@@ -115,7 +115,7 @@ def test_update_contact_list_partial(db, test_contact_list):
     contact_list_update = ContactListUpdate(**update_data)
 
     # Update contact list
-    updated_contact_list = ContactListService(db).update_contact_list(
+    updated_contact_list = ContactListRepository(db).update_contact_list(
         test_contact_list.id, contact_list_update
     )
 
@@ -129,35 +129,39 @@ def test_update_contact_list_partial(db, test_contact_list):
 
 def test_delete_contact_list(db, test_contact_list):
     """Test soft deleting a contact list."""
-    contact_list_service = ContactListService(db)
+    contact_list_repository = ContactListRepository(db)
 
     # Delete contact list
-    success = contact_list_service.delete_contact_list(test_contact_list.id)
+    success = contact_list_repository.delete_contact_list(test_contact_list.id)
 
     # Assertions
     assert success is True
-    deleted_contact_list = contact_list_service.get_contact_list(test_contact_list.id)
+    deleted_contact_list = contact_list_repository.get_contact_list(
+        test_contact_list.id
+    )
     assert deleted_contact_list is None
 
 
 def test_contact_list_not_found_cases(db):
     """Test various not found cases."""
-    contact_list_service = ContactListService(db)
+    contact_list_repository = ContactListRepository(db)
     non_existent_id = uuid4()
 
     # Get non-existent contact list
-    assert contact_list_service.get_contact_list(non_existent_id) is None
+    assert contact_list_repository.get_contact_list(non_existent_id) is None
 
     # Update non-existent contact list
     update_data = {"name": "Updated"}
     contact_list_update = ContactListUpdate(**update_data)
     assert (
-        contact_list_service.update_contact_list(non_existent_id, contact_list_update)
+        contact_list_repository.update_contact_list(
+            non_existent_id, contact_list_update
+        )
         is None
     )
 
     # Delete non-existent contact list
-    assert contact_list_service.delete_contact_list(non_existent_id) is False
+    assert contact_list_repository.delete_contact_list(non_existent_id) is False
 
 
 def test_search_contact_lists_with_filters(db, test_contact_list):
@@ -166,21 +170,21 @@ def test_search_contact_lists_with_filters(db, test_contact_list):
     filters = {
         "name": {"operator": "ilike", "value": f"%{test_contact_list.name[:5]}%"}
     }
-    results = ContactListService(db).search(filters)
+    results = ContactListRepository(db).search(filters)
 
     assert isinstance(results, list)
     assert any(contact_list.id == test_contact_list.id for contact_list in results)
 
     # Search using exact match
     filters = {"name": test_contact_list.name}
-    results = ContactListService(db).search(filters)
+    results = ContactListRepository(db).search(filters)
 
     assert len(results) == 1
     assert results[0].id == test_contact_list.id
 
     # Search with no match
     filters = {"name": {"operator": "==", "value": "nonexistent list"}}
-    results = ContactListService(db).search(filters)
+    results = ContactListRepository(db).search(filters)
 
     assert len(results) == 0
 
@@ -194,7 +198,7 @@ def test_search_contact_lists_by_description(db, test_contact_list):
                 "value": f"%{test_contact_list.description[:10]}%",
             }
         }
-        results = ContactListService(db).search(filters)
+        results = ContactListRepository(db).search(filters)
 
         assert isinstance(results, list)
         assert any(contact_list.id == test_contact_list.id for contact_list in results)
@@ -202,8 +206,8 @@ def test_search_contact_lists_by_description(db, test_contact_list):
 
 def test_get_contact_lists_query(db, test_contact_list):
     """Test getting a query object for contact lists."""
-    contact_list_service = ContactListService(db)
-    query = contact_list_service.get_contact_lists_query()
+    contact_list_repository = ContactListRepository(db)
+    query = contact_list_repository.get_contact_lists_query()
 
     # Verify it's a query object
     assert query is not None
@@ -216,57 +220,61 @@ def test_get_contact_lists_query(db, test_contact_list):
 
 def test_restore_contact_list(db, test_contact_list):
     """Test restoring a soft-deleted contact list."""
-    contact_list_service = ContactListService(db)
+    contact_list_repository = ContactListRepository(db)
 
     # First delete the contact list
-    contact_list_service.delete_contact_list(test_contact_list.id)
-    assert contact_list_service.get_contact_list(test_contact_list.id) is None
+    contact_list_repository.delete_contact_list(test_contact_list.id)
+    assert contact_list_repository.get_contact_list(test_contact_list.id) is None
 
     # Then restore it
-    success = contact_list_service.restore_contact_list(test_contact_list.id)
+    success = contact_list_repository.restore_contact_list(test_contact_list.id)
     assert success is True
 
     # Verify it's restored
-    restored_contact_list = contact_list_service.get_contact_list(test_contact_list.id)
+    restored_contact_list = contact_list_repository.get_contact_list(
+        test_contact_list.id
+    )
     assert restored_contact_list is not None
     assert restored_contact_list.id == test_contact_list.id
 
 
 def test_hard_delete_contact_list(db, test_contact_list):
     """Test hard deleting a contact list."""
-    contact_list_service = ContactListService(db)
+    contact_list_repository = ContactListRepository(db)
 
     # Hard delete the contact list
-    success = contact_list_service.hard_delete_contact_list(test_contact_list.id)
+    success = contact_list_repository.hard_delete_contact_list(test_contact_list.id)
     assert success is True
 
     # Verify it's permanently deleted
-    deleted_contact_list = contact_list_service.get_contact_list(test_contact_list.id)
+    deleted_contact_list = contact_list_repository.get_contact_list(
+        test_contact_list.id
+    )
     assert deleted_contact_list is None
 
 
 def test_get_deleted_contact_lists(db, test_contact_list):
     """Test getting soft-deleted contact lists."""
-    contact_list_service = ContactListService(db)
+    contact_list_repository = ContactListRepository(db)
 
     # Delete the contact list
-    contact_list_service.delete_contact_list(test_contact_list.id)
+    contact_list_repository.delete_contact_list(test_contact_list.id)
 
     # Get deleted contact lists
-    deleted_contact_lists = contact_list_service.get_deleted_contact_lists()
+    deleted_contact_lists = contact_list_repository.get_deleted_contact_lists()
     assert len(deleted_contact_lists) >= 1
     assert any(c.id == test_contact_list.id for c in deleted_contact_lists)
 
 
 def test_get_deleted_contact_list(db, test_contact_list):
     """Test getting a specific soft-deleted contact list."""
-    contact_list_service = ContactListService(db)
+    contact_list_repository = ContactListRepository(db)
 
     # Delete the contact list
-    contact_list_service.delete_contact_list(test_contact_list.id)
+    contact_list_repository.delete_contact_list(test_contact_list.id)
 
     # Get the deleted contact list
-    deleted_contact_list = contact_list_service.get_deleted_contact_list(
+    deleted_contact_list = contact_list_repository.get_deleted_contact_list(
         test_contact_list.id
     )
     assert deleted_contact_list is not None
@@ -275,14 +283,14 @@ def test_get_deleted_contact_list(db, test_contact_list):
 
 def test_get_contact_lists_deleted_after(db, test_contact_list):
     """Test getting contact lists deleted after a specific date."""
-    contact_list_service = ContactListService(db)
+    contact_list_repository = ContactListRepository(db)
 
     # Delete the contact list
-    contact_list_service.delete_contact_list(test_contact_list.id)
+    contact_list_repository.delete_contact_list(test_contact_list.id)
 
     # Get contact lists deleted after a past date
     past_date = datetime(2020, 1, 1)
-    deleted_contact_lists = contact_list_service.get_contact_lists_deleted_after(
+    deleted_contact_lists = contact_list_repository.get_contact_lists_deleted_after(
         past_date
     )
     assert len(deleted_contact_lists) >= 1
@@ -291,7 +299,7 @@ def test_get_contact_lists_deleted_after(db, test_contact_list):
 
 def test_create_multiple_contact_lists(db, test_user, faker):
     """Test creating multiple contact lists for the same user."""
-    contact_list_service = ContactListService(db)
+    contact_list_repository = ContactListRepository(db)
 
     # Create multiple contact lists
     contact_lists = []
@@ -302,14 +310,14 @@ def test_create_multiple_contact_lists(db, test_user, faker):
             "created_by_id": test_user.id,
         }
         contact_list_create = ContactListCreate(**contact_list_data)
-        contact_list = contact_list_service.create_contact_list(contact_list_create)
+        contact_list = contact_list_repository.create_contact_list(contact_list_create)
         contact_lists.append(contact_list)
 
     # Verify all were created
     assert len(contact_lists) == 5
 
     # Retrieve all contact lists by creator
-    retrieved_contact_lists = contact_list_service.get_contact_lists_by_creator(
+    retrieved_contact_lists = contact_list_repository.get_contact_lists_by_creator(
         test_user.id
     )
     assert len(retrieved_contact_lists) >= 5
@@ -317,7 +325,7 @@ def test_create_multiple_contact_lists(db, test_user, faker):
 
 def test_contact_list_pagination(db, test_contact_list, faker, test_user):
     """Test pagination of contact lists."""
-    contact_list_service = ContactListService(db)
+    contact_list_repository = ContactListRepository(db)
 
     # Create multiple contact lists
     for i in range(10):
@@ -327,11 +335,11 @@ def test_contact_list_pagination(db, test_contact_list, faker, test_user):
             "created_by_id": test_user.id,
         }
         contact_list_create = ContactListCreate(**contact_list_data)
-        contact_list_service.create_contact_list(contact_list_create)
+        contact_list_repository.create_contact_list(contact_list_create)
 
     # Test pagination with skip and limit
-    first_batch = contact_list_service.get_contact_lists(skip=0, limit=5)
-    second_batch = contact_list_service.get_contact_lists(skip=5, limit=5)
+    first_batch = contact_list_repository.get_contact_lists(skip=0, limit=5)
+    second_batch = contact_list_repository.get_contact_lists(skip=5, limit=5)
 
     assert len(first_batch) == 5
     assert len(second_batch) == 5

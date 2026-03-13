@@ -10,7 +10,7 @@ from app.schemas.contact import (
     ContactCreateRequest,
     ContactUpdate,
 )
-from app.services.contact_service import ContactService
+from app.repositories.contact_repository import ContactRepository
 from app.schemas.user import User
 from tessera_sdk.utils.auth import get_current_user
 from app.commands.contact.create_contact_command import CreateContactCommand
@@ -72,8 +72,8 @@ def batch_create_contacts(
 @router.get("", response_model=Page[Contact])
 def list_contacts(db: Session = Depends(get_db)):
     """List all contacts with pagination."""
-    contact_service = ContactService(db)
-    return paginate(db, contact_service.get_contacts_query())
+    contact_repository = ContactRepository(db)
+    return paginate(db, contact_repository.get_contacts_query())
 
 
 @router.get("/search", response_model=Page[Contact])
@@ -96,14 +96,14 @@ def search_contacts(
             detail="Search query parameter 'q' is required",
         )
 
-    contact_service = ContactService(db)
-    return paginate(db, contact_service.get_search_text_query(q))
+    contact_repository = ContactRepository(db)
+    return paginate(db, contact_repository.get_search_text_query(q))
 
 
 @router.get("/{contact_id}", response_model=Contact)
 def get_contact(contact_id: UUID, db: Session = Depends(get_db)):
     """Get a contact by ID."""
-    contact = ContactService(db).get_contact(contact_id)
+    contact = ContactRepository(db).get_contact(contact_id)
     if not contact:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found"

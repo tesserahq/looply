@@ -4,7 +4,7 @@ import pytest
 from uuid import uuid4
 
 from app.commands.contact_list.subscribe_user_command import SubscribeUserCommand
-from app.services.contact_list_service import ContactListService
+from app.repositories.contact_list_repository import ContactListRepository
 from app.models.contact_list_member import ContactListMember
 from app.schemas.user import User
 
@@ -21,14 +21,16 @@ def test_subscribe_command_success(db, public_contact_list, test_user):
     assert member.deleted_at is None
 
     # Verify member exists in database
-    service = ContactListService(db)
+    contact_list_repository = ContactListRepository(db)
     # Get contact by user email to verify
-    from app.services.contact_service import ContactService
+    from app.repositories.contact_repository import ContactRepository
 
-    contact_service = ContactService(db)
-    contact = contact_service.get_contact_by_email(test_user.email)
+    contact_repository = ContactRepository(db)
+    contact = contact_repository.get_contact_by_email(test_user.email)
     assert contact is not None
-    assert service.is_contact_in_list(public_contact_list.id, contact.id)
+    assert contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact.id
+    )
 
 
 def test_subscribe_command_already_subscribed(db, public_contact_list, test_user):
@@ -68,10 +70,10 @@ def test_subscribe_command_contact_not_found(db, public_contact_list, test_user)
     user_schema = User.model_validate(test_user)
 
     # Verify contact doesn't exist yet
-    from app.services.contact_service import ContactService
+    from app.repositories.contact_repository import ContactRepository
 
-    contact_service = ContactService(db)
-    contact = contact_service.get_contact_by_email(test_user.email)
+    contact_repository = ContactRepository(db)
+    contact = contact_repository.get_contact_by_email(test_user.email)
     # Contact might not exist, which is fine - command will create it
 
     # Execute command - should create contact and subscribe
@@ -79,7 +81,7 @@ def test_subscribe_command_contact_not_found(db, public_contact_list, test_user)
     assert member is not None
 
     # Verify contact was created
-    contact = contact_service.get_contact_by_email(test_user.email)
+    contact = contact_repository.get_contact_by_email(test_user.email)
     assert contact is not None
 
 
@@ -104,28 +106,34 @@ def test_subscribe_command_multiple_contacts(
     assert member1.contact_id != member2.contact_id
 
     # Verify both are in the list
-    service = ContactListService(db)
-    from app.services.contact_service import ContactService
+    contact_list_repository = ContactListRepository(db)
+    from app.repositories.contact_repository import ContactRepository
 
-    contact_service = ContactService(db)
-    contact1 = contact_service.get_contact_by_email(test_user.email)
-    contact2 = contact_service.get_contact_by_email(setup_user.email)
+    contact_repository = ContactRepository(db)
+    contact1 = contact_repository.get_contact_by_email(test_user.email)
+    contact2 = contact_repository.get_contact_by_email(setup_user.email)
     assert contact1 is not None
     assert contact2 is not None
-    assert service.is_contact_in_list(public_contact_list.id, contact1.id)
-    assert service.is_contact_in_list(public_contact_list.id, contact2.id)
+    assert contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact1.id
+    )
+    assert contact_list_repository.is_contact_in_list(
+        public_contact_list.id, contact2.id
+    )
 
 
 def test_subscribe_command_creates_member_record(db, public_contact_list, test_user):
     """Test that subscription creates a ContactListMember record."""
     # Verify no member exists initially
-    service = ContactListService(db)
-    from app.services.contact_service import ContactService
+    contact_list_repository = ContactListRepository(db)
+    from app.repositories.contact_repository import ContactRepository
 
-    contact_service = ContactService(db)
-    contact = contact_service.get_contact_by_email(test_user.email)
+    contact_repository = ContactRepository(db)
+    contact = contact_repository.get_contact_by_email(test_user.email)
     if contact:
-        assert not service.is_contact_in_list(public_contact_list.id, contact.id)
+        assert not contact_list_repository.is_contact_in_list(
+            public_contact_list.id, contact.id
+        )
 
     # Subscribe
     command = SubscribeUserCommand(db)
@@ -137,7 +145,7 @@ def test_subscribe_command_creates_member_record(db, public_contact_list, test_u
     assert member.id is not None
 
     # Verify contact was created/found
-    contact = contact_service.get_contact_by_email(test_user.email)
+    contact = contact_repository.get_contact_by_email(test_user.email)
     assert contact is not None
 
     # Verify member exists in database

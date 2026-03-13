@@ -284,7 +284,7 @@ Contact lists are implemented using three main tables:
 
 ### Service Layer
 
-The `ContactListService` provides methods for:
+The `ContactListRepository` provides methods for:
 
 - CRUD operations on lists
 - Member management (add, remove, query)

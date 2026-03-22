@@ -13,7 +13,7 @@ from app.schemas.contact import ContactCreate
 from app.repositories.contact_list_repository import ContactListRepository
 from app.repositories.contact_repository import ContactRepository
 from app.events.contact_list_events import build_contact_subscribed_event
-from tessera_sdk.events.nats_router import NatsEventPublisher
+from tessera_sdk.infra.events.nats_router import NatsEventPublisher
 
 
 class SubscribeUserCommand:

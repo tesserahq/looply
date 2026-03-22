@@ -21,7 +21,7 @@ from app.schemas.contact_list import (
 from app.repositories.contact_list_repository import ContactListRepository
 from app.models.contact_list import ContactList as ContactListModel
 from app.schemas.user import User
-from tessera_sdk.utils.auth import get_current_user
+from tessera_sdk.server.dependencies.auth import get_current_user
 from app.commands.contact_list.subscribe_user_command import SubscribeUserCommand
 from app.commands.contact_list.unsubscribe_user_command import UnsubscribeUserCommand
 

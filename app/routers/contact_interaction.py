@@ -17,7 +17,7 @@ from app.schemas.user import User
 from app.routers.utils.dependencies import get_contact_by_id
 from app.models.contact import Contact
 from app.constants.contact_interaction import ContactInteractionAction
-from tessera_sdk.utils.auth import get_current_user
+from tessera_sdk.server.dependencies.auth import get_current_user
 
 router = APIRouter(
     prefix="/contact-interactions",

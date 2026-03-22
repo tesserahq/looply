@@ -17,7 +17,7 @@ from app.schemas.waiting_list import (
 from app.repositories.waiting_list_repository import WaitingListRepository
 from app.constants.waiting_list import WaitingListMemberStatus
 from app.schemas.user import User
-from tessera_sdk.utils.auth import get_current_user
+from tessera_sdk.server.dependencies.auth import get_current_user
 
 router = APIRouter(
     prefix="/waiting-lists",

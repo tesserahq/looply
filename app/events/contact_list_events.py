@@ -11,7 +11,7 @@ from app.models.contact import Contact as ContactModel
 from app.schemas.contact_list import ContactList as ContactListSchema
 from app.schemas.contact_list_member import ContactListMember as ContactListMemberSchema
 from app.schemas.contact import Contact as ContactSchema
-from tessera_sdk.events.event import Event, event_type, event_source
+from tessera_sdk.infra.events.event import Event, event_type, event_source
 
 # Contact list events
 CONTACT_LIST_SUBSCRIBED = "contact_list.contact_subscribed"

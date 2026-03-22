@@ -12,7 +12,7 @@ from app.schemas.contact import (
 )
 from app.repositories.contact_repository import ContactRepository
 from app.schemas.user import User
-from tessera_sdk.utils.auth import get_current_user
+from tessera_sdk.server.dependencies.auth import get_current_user
 from app.commands.contact.create_contact_command import CreateContactCommand
 from app.commands.contact.update_contact_command import UpdateContactCommand
 from app.commands.contact.delete_contact_command import DeleteContactCommand

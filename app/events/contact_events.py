@@ -8,7 +8,7 @@ from uuid import UUID
 
 from app.models.contact import Contact as ContactModel
 from app.schemas.contact import Contact as ContactSchema
-from tessera_sdk.events.event import Event, event_type, event_source
+from tessera_sdk.infra.events.event import Event, event_type, event_source
 
 # Contact events
 CONTACT_CREATED = "contact.created"

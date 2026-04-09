@@ -1,6 +1,6 @@
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, column_property
 from app.models.mixins import TimestampMixin, SoftDeleteMixin
-from sqlalchemy import Boolean, Column, ForeignKey, String
+from sqlalchemy import Boolean, Column, ForeignKey, String, func, select
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
@@ -28,3 +28,17 @@ class ContactList(Base, TimestampMixin, SoftDeleteMixin):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+
+# Defined after class to avoid circular import with ContactListMember
+from app.models.contact_list_member import ContactListMember  # noqa: E402
+
+ContactList.contact_count = column_property(
+    select(func.count(ContactListMember.id))
+    .where(
+        ContactListMember.contact_list_id == ContactList.id,
+        ContactListMember.deleted_at.is_(None),
+    )
+    .correlate_except(ContactListMember)
+    .scalar_subquery()
+)

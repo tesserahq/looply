@@ -323,6 +323,35 @@ def test_create_multiple_contact_lists(db, test_user, faker):
     assert len(retrieved_contact_lists) >= 5
 
 
+def test_contact_count_is_zero_for_new_list(db, test_contact_list):
+    """Test that contact_count is 0 for a newly created list."""
+    db.refresh(test_contact_list)
+    assert test_contact_list.contact_count == 0
+
+
+def test_contact_count_increments_when_member_added(
+    db, test_contact_list, test_contact
+):
+    """Test that contact_count reflects active members."""
+    repo = ContactListRepository(db)
+    repo.add_contact_to_list(test_contact_list.id, test_contact.id)
+
+    db.refresh(test_contact_list)
+    assert test_contact_list.contact_count == 1
+
+
+def test_contact_count_excludes_soft_deleted_members(
+    db, test_contact_list, test_contact
+):
+    """Test that contact_count does not count soft-deleted memberships."""
+    repo = ContactListRepository(db)
+    repo.add_contact_to_list(test_contact_list.id, test_contact.id)
+    repo.remove_contact_from_list(test_contact_list.id, test_contact.id)
+
+    db.refresh(test_contact_list)
+    assert test_contact_list.contact_count == 0
+
+
 def test_contact_list_pagination(db, test_contact_list, faker, test_user):
     """Test pagination of contact lists."""
     contact_list_repository = ContactListRepository(db)

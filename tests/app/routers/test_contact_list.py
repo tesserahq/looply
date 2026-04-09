@@ -306,6 +306,68 @@ def test_get_my_subscriptions_only_public_lists(
     assert str(test_contact_list.id) not in list_ids
 
 
+def test_list_contact_lists_includes_contact_count(
+    client_test_user: TestClient, test_contact_list
+):
+    """Test that GET /contact-lists includes contact_count for each item."""
+    response = client_test_user.get("/contact-lists")
+    assert response.status_code == 200
+
+    data = response.json()
+    item = next(i for i in data["items"] if i["id"] == str(test_contact_list.id))
+    assert "contact_count" in item
+    assert item["contact_count"] == 0
+
+
+def test_list_contact_lists_contact_count_reflects_members(
+    client_test_user: TestClient, test_contact_list, test_contact
+):
+    """Test that contact_count increases after adding a member."""
+    # Add one member
+    client_test_user.post(
+        f"/contact-lists/{test_contact_list.id}/members",
+        json={"contact_ids": [str(test_contact.id)]},
+    )
+
+    response = client_test_user.get("/contact-lists")
+    assert response.status_code == 200
+
+    data = response.json()
+    item = next(i for i in data["items"] if i["id"] == str(test_contact_list.id))
+    assert item["contact_count"] == 1
+
+
+def test_get_contact_list_includes_contact_count(
+    client_test_user: TestClient, test_contact_list
+):
+    """Test that GET /contact-lists/{id} includes contact_count."""
+    response = client_test_user.get(f"/contact-lists/{test_contact_list.id}")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "contact_count" in data
+    assert data["contact_count"] == 0
+
+
+def test_get_contact_list_contact_count_excludes_removed_members(
+    client_test_user: TestClient, test_contact_list, test_contact
+):
+    """Test that contact_count does not include soft-deleted members."""
+    contact_list_id = str(test_contact_list.id)
+    contact_id = str(test_contact.id)
+
+    # Add then remove the member
+    client_test_user.post(
+        f"/contact-lists/{contact_list_id}/members",
+        json={"contact_ids": [contact_id]},
+    )
+    client_test_user.delete(f"/contact-lists/{contact_list_id}/members/{contact_id}")
+
+    response = client_test_user.get(f"/contact-lists/{contact_list_id}")
+    assert response.status_code == 200
+    assert response.json()["contact_count"] == 0
+
+
 def test_get_my_subscriptions_multiple_public_lists(
     client_test_user: TestClient, db, test_user, faker
 ):

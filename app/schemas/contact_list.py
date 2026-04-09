@@ -74,7 +74,7 @@ class ContactListInDB(ContactListBase):
 class ContactList(ContactListInDB):
     """Schema for contact list data returned in API responses. Inherits all fields from ContactListInDB."""
 
-    pass
+    contact_count: int = 0
 
 
 class ContactListSubscription(BaseModel):
@@ -88,6 +88,9 @@ class ContactListSubscription(BaseModel):
 
     description: Optional[str] = None
     """Description of the contact list."""
+
+    contact_count: int = 0
+    """Number of active contacts in the list."""
 
     created_at: datetime
     """Timestamp when the contact list record was created."""

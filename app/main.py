@@ -1,5 +1,5 @@
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 import rollbar
@@ -8,7 +8,9 @@ from rollbar.contrib.fastapi import ReporterMiddleware as RollbarMiddleware
 from fastapi_pagination import add_pagination
 from app.utils.metrics import PrometheusMiddleware, metrics
 from tessera_sdk.server.health import get_livez_readyz_router
-
+from tessera_sdk.server.dependencies.auth import get_current_user
+from fastapi.openapi.utils import get_openapi
+from app.models.user import User
 from .routers import (
     user,
     contact,
@@ -40,7 +42,7 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
     logger = get_logger()
     settings = get_settings()
 
-    app = FastAPI()
+    app = FastAPI(redoc_url=None, openapi_url=None)
     if settings.is_production:
         # Initialize Rollbar SDK with your server-side access token
         rollbar.init(settings.rollbar_access_token, environment=settings.environment)
@@ -125,3 +127,8 @@ if settings.otel_enabled:
 @app.get("/")
 def main_route():
     return {"message": "Hey, It is me Goku"}
+
+
+@app.get("/openapi.json")
+async def openapi(_user: User = Depends(get_current_user)):
+    return get_openapi(title="FastAPI", version="0.1.0", routes=app.routes)

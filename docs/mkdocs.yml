@@ -1,0 +1,16 @@
+site_name: Looply Documentation
+site_description: Contact management and waitlist service documentation
+
+docs_dir: .
+
+nav:
+  - Home: design.md
+  - API Patterns: api-patterns.md
+  - Contact Lists: contact-lists.md
+  - Database: database.md
+
+plugins:
+  - techdocs-core
+
+exclude_docs: |
+  mkdocs.yml

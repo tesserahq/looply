@@ -25,7 +25,7 @@ from app.exceptions.handlers import register_exception_handlers
 from app.core.logging_config import get_logger
 from app.db import db_manager
 
-SKIP_AUTH_PATHS = ["/livez", "/readyz", "/openapi.json", "/docs", "/metrics"]
+SKIP_AUTH_PATHS = ["/livez", "/readyz", "/metrics"]
 
 
 class EndpointFilter(logging.Filter):

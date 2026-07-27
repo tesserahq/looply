@@ -22,6 +22,7 @@ from app.repositories.contact_list_repository import ContactListRepository
 from app.models.contact_list import ContactList as ContactListModel
 from app.schemas.user import User
 from tessera_sdk.server.dependencies.auth import get_current_user
+from app.auth.rbac import build_rbac_dependencies
 from app.commands.contact_list.subscribe_user_command import SubscribeUserCommand
 from app.commands.contact_list.unsubscribe_user_command import UnsubscribeUserCommand
 
@@ -31,12 +32,16 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+RESOURCE = "contact_list"
+rbac = build_rbac_dependencies(resource=RESOURCE)
+
 
 @router.post("", response_model=ContactList, status_code=status.HTTP_201_CREATED)
 def create_contact_list(
     contact_list_data: ContactListCreateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["create"]),
 ):
     """Create a new contact list."""
     contact_list = ContactListCreate(
@@ -49,7 +54,10 @@ def create_contact_list(
 
 
 @router.get("", response_model=Page[ContactList])
-def list_contact_lists(db: Session = Depends(get_db)):
+def list_contact_lists(
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """List all contact lists with pagination."""
     contact_list_repository = ContactListRepository(db)
     return paginate(db, contact_list_repository.get_contact_lists_query())
@@ -96,7 +104,11 @@ def get_my_subscriptions(
 
 
 @router.get("/{contact_list_id}", response_model=ContactList)
-def get_contact_list(contact_list_id: UUID, db: Session = Depends(get_db)):
+def get_contact_list(
+    contact_list_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get a contact list by ID."""
     contact_list = ContactListRepository(db).get_contact_list(contact_list_id)
     if not contact_list:
@@ -111,6 +123,7 @@ def update_contact_list(
     contact_list_id: UUID,
     contact_list: ContactListUpdate,
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["update"]),
 ):
     """Update a contact list."""
     updated_contact_list = ContactListRepository(db).update_contact_list(
@@ -124,7 +137,11 @@ def update_contact_list(
 
 
 @router.delete("/{contact_list_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_contact_list(contact_list_id: UUID, db: Session = Depends(get_db)):
+def delete_contact_list(
+    contact_list_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["delete"]),
+):
     """Delete a contact list."""
     if not ContactListRepository(db).delete_contact_list(contact_list_id):
         raise HTTPException(
@@ -136,6 +153,7 @@ def delete_contact_list(contact_list_id: UUID, db: Session = Depends(get_db)):
 def search_contact_lists(
     filters: Dict[str, Any],
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
 ):
     """Search contact lists based on dynamic filter criteria."""
     contact_list_repository = ContactListRepository(db)
@@ -151,6 +169,8 @@ def add_members_to_list(
     contact_list_id: UUID,
     request: AddMembersRequest,
     db: Session = Depends(get_db),
+    # Membership changes mutate the list, so they're gated the same as update.
+    _authorized: bool = Depends(rbac["update"]),
 ):
     """Add contacts to a contact list."""
     contact_list_repository = ContactListRepository(db)
@@ -181,6 +201,7 @@ def remove_member_from_list(
     contact_list_id: UUID,
     contact_id: UUID,
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["update"]),
 ):
     """Remove a contact from a contact list."""
     contact_list_repository = ContactListRepository(db)
@@ -195,7 +216,11 @@ def remove_member_from_list(
 
 
 @router.get("/{contact_list_id}/members", response_model=ListMembersResponse)
-def get_list_members(contact_list_id: UUID, db: Session = Depends(get_db)):
+def get_list_members(
+    contact_list_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get all members of a contact list."""
     contact_list_repository = ContactListRepository(db)
 
@@ -214,7 +239,11 @@ def get_list_members(contact_list_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.get("/{contact_list_id}/members/count", response_model=MemberCountResponse)
-def get_list_member_count(contact_list_id: UUID, db: Session = Depends(get_db)):
+def get_list_member_count(
+    contact_list_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get the number of members in a contact list."""
     contact_list_repository = ContactListRepository(db)
 
@@ -231,7 +260,11 @@ def get_list_member_count(contact_list_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.delete("/{contact_list_id}/members", status_code=status.HTTP_200_OK)
-def clear_list_members(contact_list_id: UUID, db: Session = Depends(get_db)):
+def clear_list_members(
+    contact_list_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["update"]),
+):
     """Clear all members from a contact list."""
     contact_list_repository = ContactListRepository(db)
 
@@ -251,7 +284,11 @@ def clear_list_members(contact_list_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.get("/contacts/{contact_id}/contact-lists", response_model=list[ContactList])
-def get_contact_lists_for_contact(contact_id: UUID, db: Session = Depends(get_db)):
+def get_contact_lists_for_contact(
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get all contact lists that a contact belongs to."""
     from app.repositories.contact_repository import ContactRepository
 
@@ -273,6 +310,7 @@ def check_contact_membership(
     contact_list_id: UUID,
     contact_id: UUID,
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
 ):
     """Check if a contact is a member of a contact list."""
     contact_list_repository = ContactListRepository(db)

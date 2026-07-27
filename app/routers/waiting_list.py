@@ -18,6 +18,7 @@ from app.repositories.waiting_list_repository import WaitingListRepository
 from app.constants.waiting_list import WaitingListMemberStatus
 from app.schemas.user import User
 from tessera_sdk.server.dependencies.auth import get_current_user
+from app.auth.rbac import build_rbac_dependencies
 
 router = APIRouter(
     prefix="/waiting-lists",
@@ -25,9 +26,14 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+RESOURCE = "waiting_list"
+rbac = build_rbac_dependencies(resource=RESOURCE)
+
 
 @router.get("/member-statuses")
-def list_member_statuses():
+def list_member_statuses(
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get all available member statuses for waiting lists."""
     statuses = WaitingListMemberStatus.values()
     status_details = WaitingListMemberStatus.get_all_with_descriptions()
@@ -46,6 +52,7 @@ def create_waiting_list(
     waiting_list_data: WaitingListCreateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["create"]),
 ):
     """Create a new waiting list."""
     waiting_list = WaitingListCreate(
@@ -58,14 +65,21 @@ def create_waiting_list(
 
 
 @router.get("", response_model=Page[WaitingList])
-def list_waiting_lists(db: Session = Depends(get_db)):
+def list_waiting_lists(
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """List all waiting lists with pagination."""
     waiting_list_repository = WaitingListRepository(db)
     return paginate(db, waiting_list_repository.get_waiting_lists_query())
 
 
 @router.get("/{waiting_list_id}", response_model=WaitingList)
-def get_waiting_list(waiting_list_id: UUID, db: Session = Depends(get_db)):
+def get_waiting_list(
+    waiting_list_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get a waiting list by ID."""
     waiting_list = WaitingListRepository(db).get_waiting_list(waiting_list_id)
     if not waiting_list:
@@ -80,6 +94,7 @@ def update_waiting_list(
     waiting_list_id: UUID,
     waiting_list: WaitingListUpdate,
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["update"]),
 ):
     """Update a waiting list."""
     updated_waiting_list = WaitingListRepository(db).update_waiting_list(
@@ -93,7 +108,11 @@ def update_waiting_list(
 
 
 @router.delete("/{waiting_list_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_waiting_list(waiting_list_id: UUID, db: Session = Depends(get_db)):
+def delete_waiting_list(
+    waiting_list_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["delete"]),
+):
     """Delete a waiting list."""
     if not WaitingListRepository(db).delete_waiting_list(waiting_list_id):
         raise HTTPException(
@@ -105,6 +124,7 @@ def delete_waiting_list(waiting_list_id: UUID, db: Session = Depends(get_db)):
 def search_waiting_lists(
     filters: Dict[str, Any],
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
 ):
     """Search waiting lists based on dynamic filter criteria."""
     waiting_list_repository = WaitingListRepository(db)
@@ -120,6 +140,8 @@ def add_members_to_waiting_list(
     waiting_list_id: UUID,
     request: AddWaitingListMembersRequest,
     db: Session = Depends(get_db),
+    # Membership changes mutate the list, so they're gated the same as update.
+    _authorized: bool = Depends(rbac["update"]),
 ):
     """Add contacts to a waiting list."""
     waiting_list_repository = WaitingListRepository(db)
@@ -150,6 +172,7 @@ def remove_member_from_waiting_list(
     waiting_list_id: UUID,
     contact_id: UUID,
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["update"]),
 ):
     """Remove a contact from a waiting list."""
     waiting_list_repository = WaitingListRepository(db)
@@ -164,7 +187,11 @@ def remove_member_from_waiting_list(
 
 
 @router.get("/{waiting_list_id}/members")
-def get_waiting_list_members(waiting_list_id: UUID, db: Session = Depends(get_db)):
+def get_waiting_list_members(
+    waiting_list_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get all members of a waiting list with their details."""
     waiting_list_repository = WaitingListRepository(db)
 
@@ -183,7 +210,11 @@ def get_waiting_list_members(waiting_list_id: UUID, db: Session = Depends(get_db
 @router.get(
     "/{waiting_list_id}/members/count", response_model=WaitingListMemberCountResponse
 )
-def get_waiting_list_member_count(waiting_list_id: UUID, db: Session = Depends(get_db)):
+def get_waiting_list_member_count(
+    waiting_list_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get the number of members in a waiting list."""
     waiting_list_repository = WaitingListRepository(db)
 
@@ -205,6 +236,7 @@ def update_member_status(
     contact_id: UUID,
     status: str,
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["update"]),
 ):
     """Update the status of a member on a waiting list."""
     waiting_list_repository = WaitingListRepository(db)
@@ -227,7 +259,10 @@ def update_member_status(
 
 @router.get("/{waiting_list_id}/members/by-status/{status}")
 def get_members_by_status(
-    waiting_list_id: UUID, status: str, db: Session = Depends(get_db)
+    waiting_list_id: UUID,
+    status: str,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
 ):
     """Get all members with a specific status on a waiting list."""
     waiting_list_repository = WaitingListRepository(db)
@@ -250,7 +285,10 @@ def get_members_by_status(
 
 @router.get("/{waiting_list_id}/members/by-status/{status}/count")
 def get_member_count_by_status(
-    waiting_list_id: UUID, status: str, db: Session = Depends(get_db)
+    waiting_list_id: UUID,
+    status: str,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
 ):
     """Get the count of members with a specific status."""
     waiting_list_repository = WaitingListRepository(db)
@@ -277,6 +315,7 @@ def update_members_status_bulk(
     contact_ids: list[UUID],
     status: str,
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["update"]),
 ):
     """Update the status of multiple members at once."""
     waiting_list_repository = WaitingListRepository(db)
@@ -300,7 +339,11 @@ def update_members_status_bulk(
 
 
 @router.delete("/{waiting_list_id}/members", status_code=status.HTTP_200_OK)
-def clear_waiting_list_members(waiting_list_id: UUID, db: Session = Depends(get_db)):
+def clear_waiting_list_members(
+    waiting_list_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["update"]),
+):
     """Clear all members from a waiting list."""
     waiting_list_repository = WaitingListRepository(db)
 
@@ -320,7 +363,11 @@ def clear_waiting_list_members(waiting_list_id: UUID, db: Session = Depends(get_
 
 
 @router.get("/contacts/{contact_id}/waiting-lists", response_model=list[WaitingList])
-def get_waiting_lists_for_contact(contact_id: UUID, db: Session = Depends(get_db)):
+def get_waiting_lists_for_contact(
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get all waiting lists that a contact belongs to."""
     from app.repositories.contact_repository import ContactRepository
 
@@ -342,6 +389,7 @@ def check_contact_membership(
     waiting_list_id: UUID,
     contact_id: UUID,
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
 ):
     """Check if a contact is a member of a waiting list."""
     waiting_list_repository = WaitingListRepository(db)
@@ -367,6 +415,7 @@ def get_member_status(
     waiting_list_id: UUID,
     contact_id: UUID,
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
 ):
     """Get the status of a member on a waiting list."""
     waiting_list_repository = WaitingListRepository(db)

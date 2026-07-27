@@ -4,6 +4,7 @@ from app.db import get_db
 from app.schemas.stats import Stats, ContactInteractionWithContact, ContactSummary
 from app.schemas.common import DataResponse
 from app.repositories.stats_repository import StatsRepository
+from app.auth.rbac import build_rbac_dependencies
 
 router = APIRouter(
     prefix="/stats",
@@ -11,9 +12,15 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+RESOURCE = "stats"
+rbac = build_rbac_dependencies(resource=RESOURCE)
+
 
 @router.get("", response_model=DataResponse[Stats])
-def get_stats(db: Session = Depends(get_db)):
+def get_stats(
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get statistics about contacts, lists, and upcoming interactions."""
     stats_repository = StatsRepository(db)
 

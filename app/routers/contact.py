@@ -13,6 +13,7 @@ from app.schemas.contact import (
 from app.repositories.contact_repository import ContactRepository
 from app.schemas.user import User
 from tessera_sdk.server.dependencies.auth import get_current_user
+from app.auth.rbac import build_rbac_dependencies
 from app.commands.contact.create_contact_command import CreateContactCommand
 from app.commands.contact.update_contact_command import UpdateContactCommand
 from app.commands.contact.delete_contact_command import DeleteContactCommand
@@ -26,12 +27,16 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+RESOURCE = "contact"
+rbac = build_rbac_dependencies(resource=RESOURCE)
+
 
 @router.post("", response_model=Contact, status_code=status.HTTP_201_CREATED)
 def create_contact(
     contact_data: ContactCreateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["create"]),
 ):
     """Create a new contact."""
     try:
@@ -54,6 +59,7 @@ def batch_create_contacts(
     contacts_data: list[ContactCreateRequest],
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["create"]),
 ):
     """Batch create multiple contacts."""
     try:
@@ -70,7 +76,10 @@ def batch_create_contacts(
 
 
 @router.get("", response_model=Page[Contact])
-def list_contacts(db: Session = Depends(get_db)):
+def list_contacts(
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """List all contacts with pagination."""
     contact_repository = ContactRepository(db)
     return paginate(db, contact_repository.get_contacts_query())
@@ -80,6 +89,7 @@ def list_contacts(db: Session = Depends(get_db)):
 def search_contacts(
     q: str,
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
 ):
     """
     Search contacts by text using PostgreSQL full-text search.
@@ -101,7 +111,11 @@ def search_contacts(
 
 
 @router.get("/{contact_id}", response_model=Contact)
-def get_contact(contact_id: UUID, db: Session = Depends(get_db)):
+def get_contact(
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get a contact by ID."""
     contact = ContactRepository(db).get_contact(contact_id)
     if not contact:
@@ -117,6 +131,7 @@ def update_contact(
     contact: ContactUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["update"]),
 ):
     """Update a contact."""
     try:
@@ -140,6 +155,7 @@ def delete_contact(
     contact_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["delete"]),
 ):
     """Delete a contact."""
     try:

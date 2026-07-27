@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 # Patch authorize BEFORE importing create_app (which imports routers, and
 # app.auth.rbac.build_rbac_dependencies calls authorize() eagerly at import
-# time). Without this, campaign RBAC dependencies would try to call the real
+# time). Without this, RBAC dependencies would try to call the real
 # Custos service in every test.
 def mock_authorize(*args, **kwargs):
     """Mock authorize function that returns a dependency always returning True.

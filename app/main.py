@@ -11,7 +11,6 @@ from tessera_sdk.server.dependencies.auth import get_current_user
 from fastapi.openapi.utils import get_openapi
 from app.models.user import User
 from .routers import (
-    user,
     contact,
     contact_list,
     contact_interaction,
@@ -93,7 +92,6 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
         allow_headers=["*"],  # Permitir todos los headers
     )
 
-    app.include_router(user.router)
     app.include_router(contact.router)
     app.include_router(contact_list.router)
     app.include_router(contact_interaction.router)

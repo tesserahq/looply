@@ -18,6 +18,7 @@ from app.routers.utils.dependencies import get_contact_by_id
 from app.models.contact import Contact
 from app.constants.contact_interaction import ContactInteractionAction
 from tessera_sdk.server.dependencies.auth import get_current_user
+from app.auth.rbac import build_rbac_dependencies
 
 router = APIRouter(
     prefix="/contact-interactions",
@@ -32,9 +33,14 @@ nested_router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+RESOURCE = "contact_interaction"
+rbac = build_rbac_dependencies(resource=RESOURCE)
+
 
 @router.get("/actions")
-def list_actions():
+def list_actions(
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get all available actions for contact interactions."""
     actions = ContactInteractionAction.get_all_with_labels()
 
@@ -48,7 +54,10 @@ def list_actions():
 
 
 @router.get("/pending-actions", response_model=Page[ContactInteraction])
-def get_pending_actions(db: Session = Depends(get_db)):
+def get_pending_actions(
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get all pending actions across all contacts."""
     interaction_repository = ContactInteractionRepository(db)
     return paginate(db, interaction_repository.get_pending_actions_query())
@@ -62,6 +71,7 @@ def create_contact_interaction(
     contact: Contact = Depends(get_contact_by_id),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["create"]),
 ):
     """Create a new interaction for a contact."""
     interaction_repository = ContactInteractionRepository(db)
@@ -87,6 +97,7 @@ def create_contact_interaction(
 def list_contact_interactions(
     contact: Contact = Depends(get_contact_by_id),
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
 ):
     """List all interactions for a specific contact with pagination."""
     interaction_repository = ContactInteractionRepository(db)
@@ -99,6 +110,7 @@ def list_contact_interactions(
 def get_last_contact_interaction(
     contact: Contact = Depends(get_contact_by_id),
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
 ):
     """Get the most recent interaction for a contact."""
     interaction_repository = ContactInteractionRepository(db)
@@ -113,7 +125,11 @@ def get_last_contact_interaction(
 
 # Global item routes
 @router.get("/{interaction_id}", response_model=ContactInteraction)
-def get_contact_interaction(interaction_id: UUID, db: Session = Depends(get_db)):
+def get_contact_interaction(
+    interaction_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """Get a contact interaction by ID."""
     interaction = ContactInteractionRepository(db).get_contact_interaction(
         interaction_id
@@ -131,6 +147,7 @@ def update_contact_interaction(
     interaction_id: UUID,
     interaction: ContactInteractionUpdate,
     db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["update"]),
 ):
     """Update a contact interaction."""
     updated_interaction = ContactInteractionRepository(db).update_contact_interaction(
@@ -145,7 +162,11 @@ def update_contact_interaction(
 
 
 @router.delete("/{interaction_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_contact_interaction(interaction_id: UUID, db: Session = Depends(get_db)):
+def delete_contact_interaction(
+    interaction_id: UUID,
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["delete"]),
+):
     """Delete a contact interaction."""
     if not ContactInteractionRepository(db).delete_contact_interaction(interaction_id):
         raise HTTPException(
@@ -155,7 +176,10 @@ def delete_contact_interaction(interaction_id: UUID, db: Session = Depends(get_d
 
 
 @router.get("", response_model=Page[ContactInteraction])
-def list_contact_interactions_global(db: Session = Depends(get_db)):
+def list_contact_interactions_global(
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
     """List all contact interactions with pagination."""
     interaction_repository = ContactInteractionRepository(db)
     return paginate(db, interaction_repository.get_contact_interactions_query())

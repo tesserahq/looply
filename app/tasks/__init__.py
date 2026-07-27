@@ -14,10 +14,7 @@ import app.models  # noqa: F401
 # Import tasks for autodiscovery (using lazy imports to avoid heavy dependencies)
 def _import_tasks():
     """Import tasks for registration."""
-    # try:
-    #     from . import backfill_digests  # noqa: F401
-    # except ImportError:
-    #     pass
+    from . import poll_campaign_status  # noqa: F401
 
 
 _import_tasks()

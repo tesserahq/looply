@@ -1,10 +1,10 @@
-from . import user, contact, contact_list, contact_interaction, waiting_list, stats
+from . import contact, contact_list, contact_interaction, waiting_list, stats, campaign
 
 __all__ = [
-    "user",
     "contact",
     "contact_list",
     "contact_interaction",
     "waiting_list",
     "stats",
+    "campaign",
 ]

@@ -23,6 +23,18 @@ def test_create_campaign(client_test_user: TestClient, faker, test_contact_list)
     assert data["id"] is not None
 
 
+def test_create_campaign_invalid_contact_list_returns_404(
+    client_test_user: TestClient, faker
+):
+    payload = {
+        "name": faker.catch_phrase(),
+        "contact_list_id": str(uuid4()),
+    }
+
+    response = client_test_user.post("/campaigns", json=payload)
+    assert response.status_code == 404
+
+
 def test_list_campaigns(client_test_user: TestClient, draft_campaign):
     response = client_test_user.get("/campaigns")
     assert response.status_code == 200

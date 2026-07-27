@@ -14,6 +14,7 @@ from app.schemas.campaign import (
     SendCampaignResponse,
 )
 from app.repositories.campaign_repository import CampaignRepository
+from app.repositories.contact_list_repository import ContactListRepository
 from app.schemas.user import User
 from tessera_sdk.server.dependencies.auth import get_current_user
 from app.auth.rbac import build_rbac_dependencies
@@ -37,6 +38,11 @@ def create_campaign(
     _authorized: bool = Depends(rbac["create"]),
 ):
     """Create a new draft campaign."""
+    if not ContactListRepository(db).get_contact_list(campaign_data.contact_list_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Contact list not found"
+        )
+
     campaign = CampaignCreate(
         **campaign_data.model_dump(),
         created_by_id=current_user.id,

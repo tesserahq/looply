@@ -26,6 +26,15 @@ celery_app.conf.update(
 
 celery_app.autodiscover_tasks(["app.tasks"])  # ensure tasks are registered explicitly
 
+# First beat schedule in this repo: requires a `celery -A app.tasks beat` process
+# to actually be deployed/run somewhere in addition to the worker.
+celery_app.conf.beat_schedule = {
+    "poll-campaign-status": {
+        "task": "app.tasks.poll_campaign_status",
+        "schedule": 60.0,
+    },
+}
+
 # # Explicitly register tasks to ensure they're available
 # def register_tasks():
 #     """Explicitly import tasks to ensure registration."""

@@ -1,0 +1,154 @@
+from pydantic import BaseModel
+from typing import Optional
+from uuid import UUID
+from datetime import datetime
+
+
+class CampaignBase(BaseModel):
+    """Base campaign model containing common campaign attributes."""
+
+    id: Optional[UUID] = None
+    """Unique identifier for the campaign. Defaults to None."""
+
+    name: str
+    """Internal name of the campaign. Required field."""
+
+    contact_list_id: UUID
+    """The Looply contact list this campaign sends to."""
+
+    project_id: Optional[UUID] = None
+    """The Sendly project that owns the template and broadcast. Optional."""
+
+    template_id: Optional[UUID] = None
+    """A live Sendly template reference. Required to send, optional while drafting."""
+
+    template_variables: dict = {}
+    """Shared variables forwarded to the Sendly template."""
+
+    from_email: Optional[str] = None
+    """Optional sender override; Sendly uses the template default when omitted."""
+
+    subject: Optional[str] = None
+    """Optional subject override; Sendly uses the template subject when omitted."""
+
+    tags: list[str] = []
+    """Optional campaign tags forwarded to Sendly."""
+
+    created_by_id: UUID
+    """ID of the user who created this campaign."""
+
+
+class CampaignCreate(CampaignBase):
+    """Schema for creating a new campaign. Inherits all fields from CampaignBase."""
+
+    pass
+
+
+class CampaignCreateRequest(BaseModel):
+    """Schema for creating a new campaign without created_by_id (injected from current user)."""
+
+    name: str
+    """Internal name of the campaign. Required field."""
+
+    contact_list_id: UUID
+    """The Looply contact list this campaign sends to."""
+
+    project_id: Optional[UUID] = None
+    """The Sendly project that owns the template and broadcast. Optional."""
+
+    template_id: Optional[UUID] = None
+    """A live Sendly template reference. Required to send, optional while drafting."""
+
+    template_variables: dict = {}
+    """Shared variables forwarded to the Sendly template."""
+
+    from_email: Optional[str] = None
+    """Optional sender override; Sendly uses the template default when omitted."""
+
+    subject: Optional[str] = None
+    """Optional subject override; Sendly uses the template subject when omitted."""
+
+    tags: list[str] = []
+    """Optional campaign tags forwarded to Sendly."""
+
+
+class CampaignUpdate(BaseModel):
+    """Schema for updating an existing campaign. All fields are optional.
+
+    Only allowed while the campaign is in 'draft' status (enforced by the router).
+    Status transitions happen only via the send action and the status poller, never
+    through this schema.
+    """
+
+    name: Optional[str] = None
+    """Updated name."""
+
+    contact_list_id: Optional[UUID] = None
+    """Updated contact list."""
+
+    project_id: Optional[UUID] = None
+    """Updated Sendly project reference."""
+
+    template_id: Optional[UUID] = None
+    """Updated Sendly template reference."""
+
+    template_variables: Optional[dict] = None
+    """Updated template variables."""
+
+    from_email: Optional[str] = None
+    """Updated sender override."""
+
+    subject: Optional[str] = None
+    """Updated subject override."""
+
+    tags: Optional[list[str]] = None
+    """Updated campaign tags."""
+
+
+class CampaignInDB(CampaignBase):
+    """Schema representing a campaign as stored in the database. Includes database-specific fields."""
+
+    id: UUID
+    """Unique identifier for the campaign in the database."""
+
+    status: str
+    """Campaign lifecycle status: draft, sending, completed, or failed."""
+
+    batch_id: Optional[str] = None
+    """Batch ID returned by Sendly after the broadcast is accepted."""
+
+    sent_at: Optional[datetime] = None
+    """When Sendly accepted the broadcast."""
+
+    completed_at: Optional[datetime] = None
+    """When Sendly reported the send stage finished."""
+
+    created_at: datetime
+    """Timestamp when the campaign record was created."""
+
+    updated_at: datetime
+    """Timestamp when the campaign record was last updated."""
+
+    model_config = {"from_attributes": True}
+
+
+class Campaign(CampaignInDB):
+    """Schema for campaign data returned in API responses. Inherits all fields from CampaignInDB."""
+
+    pass
+
+
+class SendCampaignResponse(BaseModel):
+    """Schema for the response returned by the send campaign action."""
+
+    id: UUID
+    """Unique identifier for the campaign."""
+
+    status: str
+    """Campaign status after the send attempt (sending on success)."""
+
+    batch_id: Optional[str] = None
+    """Batch ID returned by Sendly after the broadcast is accepted."""
+
+    recipient_count: int
+    """Number of eligible, deduplicated recipients the broadcast was sent to."""

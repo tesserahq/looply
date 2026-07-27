@@ -7,11 +7,34 @@ from sqlalchemy.orm import sessionmaker
 from fastapi import Request
 from fastapi.security import HTTPAuthorizationCredentials
 from app.db import get_db
-from app.main import create_app
 from starlette.middleware.base import BaseHTTPMiddleware
 from alembic import command
 from alembic.config import Config
 from faker import Faker
+from unittest.mock import patch
+
+
+# Patch authorize BEFORE importing create_app (which imports routers, and
+# app.auth.rbac.build_rbac_dependencies calls authorize() eagerly at import
+# time). Without this, campaign RBAC dependencies would try to call the real
+# Custos service in every test.
+def mock_authorize(*args, **kwargs):
+    """Mock authorize function that returns a dependency always returning True.
+    Mirrors tessera_sdk.server.dependencies.authorization.authorize's signature.
+    """
+
+    async def always_authorized(request=None):
+        return True
+
+    return always_authorized
+
+
+_authorize_patcher = patch(
+    "tessera_sdk.server.dependencies.authorization.authorize", mock_authorize
+)
+_authorize_patcher.start()
+
+from app.main import create_app  # noqa: E402
 
 pytest_plugins = [
     "tests.fixtures.user_fixtures",
@@ -19,6 +42,7 @@ pytest_plugins = [
     "tests.fixtures.contact_interaction_fixtures",
     "tests.fixtures.contact_list_fixtures",
     "tests.fixtures.waiting_list_fixtures",
+    "tests.fixtures.campaign_fixtures",
 ]
 
 logger = logging.getLogger(__name__)

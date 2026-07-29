@@ -77,6 +77,13 @@ class ContactList(ContactListInDB):
     contact_count: int = 0
 
 
+class ContactWithLists(Contact):
+    """Schema for contact data including the contact lists it belongs to."""
+
+    contact_lists: list[ContactList] = []
+    """Contact lists that this contact currently belongs to."""
+
+
 class ContactListSubscription(BaseModel):
     """Schema for contact list data returned in subscription endpoints. Excludes created_by_id and is_public fields."""
 

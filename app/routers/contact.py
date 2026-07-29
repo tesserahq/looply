@@ -11,6 +11,8 @@ from app.schemas.contact import (
     ContactUpdate,
 )
 from app.repositories.contact_repository import ContactRepository
+from app.repositories.contact_list_repository import ContactListRepository
+from app.schemas.contact_list import ContactWithLists
 from app.schemas.user import User
 from tessera_sdk.server.dependencies.auth import get_current_user
 from app.auth.rbac import build_rbac_dependencies
@@ -110,19 +112,23 @@ def search_contacts(
     return paginate(db, contact_repository.get_search_text_query(q))
 
 
-@router.get("/{contact_id}", response_model=Contact)
+@router.get("/{contact_id}", response_model=ContactWithLists)
 def get_contact(
     contact_id: UUID,
     db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
-    """Get a contact by ID."""
+    """Get a contact by ID, including the contact lists it belongs to."""
     contact = ContactRepository(db).get_contact(contact_id)
     if not contact:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found"
         )
-    return contact
+    contact_lists = ContactListRepository(db).get_contact_lists_for_contact(contact_id)
+    return ContactWithLists(
+        **Contact.model_validate(contact).model_dump(),
+        contact_lists=contact_lists,  # type: ignore[arg-type]
+    )
 
 
 @router.put("/{contact_id}", response_model=Contact)

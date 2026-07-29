@@ -114,6 +114,29 @@ class TestContactRouter:
         assert contact["id"] == str(test_contact.id)
         assert contact["first_name"] == test_contact.first_name
 
+    def test_get_contact_includes_contact_lists(
+        self, client, test_contact, test_contact_list
+    ):
+        """Test GET /contacts/{contact_id} includes the contact lists it belongs to."""
+        client.post(
+            f"/contact-lists/{test_contact_list.id}/members",
+            json={"contact_ids": [str(test_contact.id)]},
+        )
+
+        response = client.get(f"/contacts/{test_contact.id}")
+        assert response.status_code == 200
+        contact = response.json()
+        assert "contact_lists" in contact
+        contact_list_ids = [cl["id"] for cl in contact["contact_lists"]]
+        assert str(test_contact_list.id) in contact_list_ids
+
+    def test_get_contact_no_contact_lists(self, client, test_contact):
+        """Test GET /contacts/{contact_id} returns an empty list when the contact has no lists."""
+        response = client.get(f"/contacts/{test_contact.id}")
+        assert response.status_code == 200
+        contact = response.json()
+        assert contact["contact_lists"] == []
+
     def test_get_contact_not_found(self, client):
         """Test GET /contacts/{contact_id} with non-existent ID."""
         fake_id = str(uuid4())

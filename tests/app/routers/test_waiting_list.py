@@ -1,3 +1,4 @@
+from uuid import uuid4
 from fastapi.testclient import TestClient
 
 
@@ -88,3 +89,129 @@ def test_create_waiting_list_minimal(client_test_user: TestClient, faker):
     assert data["name"] == waiting_list_data["name"]
     assert data["description"] is None
     assert data["id"] is not None
+
+
+class TestWaitingListMembers:
+    """Test class for POST /waiting-lists/{waiting_list_id}/members."""
+
+    def test_add_members_by_contact_id(
+        self, client_test_user: TestClient, test_waiting_list, test_contact
+    ):
+        """Test adding a member using an existing contact_id."""
+        response = client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={"contact_ids": [str(test_contact.id)]},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["added_count"] == 1
+        assert data["requested_count"] == 1
+
+    def test_add_member_by_email_creates_contact(
+        self, client_test_user: TestClient, test_waiting_list, faker, db
+    ):
+        """Test that a new contact is created when the email doesn't match one."""
+        from app.models.contact import Contact
+
+        email = faker.unique.email()
+        response = client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={
+                "contacts": [
+                    {"email": email, "first_name": "Emi", "last_name": "Jankowski"}
+                ]
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["added_count"] == 1
+        assert data["requested_count"] == 1
+
+        created_contact = (
+            db.query(Contact).filter(Contact.email == email.lower()).first()
+        )
+        assert created_contact is not None
+        assert created_contact.first_name == "Emi"
+
+    def test_add_member_by_email_reuses_existing_contact(
+        self, client_test_user: TestClient, test_waiting_list, test_contact, db
+    ):
+        """Test that an existing contact is reused (not duplicated) by email."""
+        from app.models.contact import Contact
+
+        response = client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={
+                "contacts": [
+                    {
+                        "email": test_contact.email,
+                        "first_name": "Someone Else",
+                    }
+                ]
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["added_count"] == 1
+
+        matching_contacts = (
+            db.query(Contact).filter(Contact.email == test_contact.email).all()
+        )
+        assert len(matching_contacts) == 1
+        # Existing contact's name is untouched by the request payload.
+        assert matching_contacts[0].first_name == test_contact.first_name
+
+    def test_add_member_by_email_case_insensitive_match(
+        self, client_test_user: TestClient, test_waiting_list, test_contact, db
+    ):
+        """Test that email matching is case-insensitive and doesn't create a duplicate."""
+        from app.models.contact import Contact
+
+        response = client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={"contacts": [{"email": test_contact.email.upper()}]},
+        )
+
+        assert response.status_code == 200
+        matching_contacts = (
+            db.query(Contact).filter(Contact.email == test_contact.email).all()
+        )
+        assert len(matching_contacts) == 1
+
+    def test_add_members_mixed_ids_and_emails(
+        self, client_test_user: TestClient, test_waiting_list, test_contact, faker
+    ):
+        """Test that contact_ids and contacts can be combined in one request."""
+        response = client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={
+                "contact_ids": [str(test_contact.id)],
+                "contacts": [{"email": faker.unique.email()}],
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["added_count"] == 2
+        assert data["requested_count"] == 2
+
+    def test_add_members_empty_request(
+        self, client_test_user: TestClient, test_waiting_list
+    ):
+        """Test that an empty request (no contact_ids, no contacts) is rejected."""
+        response = client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members", json={}
+        )
+        assert response.status_code == 400
+
+    def test_add_members_waiting_list_not_found(self, client_test_user: TestClient):
+        """Test adding members to a non-existent waiting list."""
+        fake_id = str(uuid4())
+        response = client_test_user.post(
+            f"/waiting-lists/{fake_id}/members",
+            json={"contacts": [{"email": "someone@example.com"}]},
+        )
+        assert response.status_code == 404

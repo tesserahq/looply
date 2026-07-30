@@ -16,6 +16,9 @@ from app.schemas.waiting_list import (
 )
 from app.repositories.waiting_list_repository import WaitingListRepository
 from app.constants.waiting_list import WaitingListMemberStatus
+from app.commands.waiting_list.add_contacts_by_email_command import (
+    AddContactsByEmailToWaitingListCommand,
+)
 from app.schemas.user import User
 from tessera_sdk.server.dependencies.auth import get_current_user
 from app.auth.rbac import build_rbac_dependencies
@@ -140,10 +143,12 @@ def add_members_to_waiting_list(
     waiting_list_id: UUID,
     request: AddWaitingListMembersRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     # Membership changes mutate the list, so they're gated the same as update.
     _authorized: bool = Depends(rbac["update"]),
 ):
-    """Add contacts to a waiting list."""
+    """Add contacts to a waiting list, either by existing contact ID or by email
+    (creating the contact first if none exists for that email)."""
     waiting_list_repository = WaitingListRepository(db)
 
     # Check if waiting list exists
@@ -153,15 +158,28 @@ def add_members_to_waiting_list(
             status_code=status.HTTP_404_NOT_FOUND, detail="Waiting list not found"
         )
 
-    # Add contacts
+    if not request.contact_ids and not request.contacts:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one of contact_ids or contacts is required",
+        )
+
+    # Add contacts referenced by ID
     added_count = waiting_list_repository.add_contacts_to_list(
         waiting_list_id, request.contact_ids, request.status
     )
 
+    # Add contacts referenced by email, creating them first if needed
+    if request.contacts:
+        add_by_email_command = AddContactsByEmailToWaitingListCommand(db)
+        added_count += add_by_email_command.execute(
+            waiting_list_id, request.contacts, request.status, current_user.id
+        )
+
     return {
         "message": f"Successfully added {added_count} contact(s) to the waiting list",
         "added_count": added_count,
-        "requested_count": len(request.contact_ids),
+        "requested_count": len(request.contact_ids) + len(request.contacts),
     }
 
 

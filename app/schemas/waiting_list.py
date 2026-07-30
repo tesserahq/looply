@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
@@ -119,11 +119,30 @@ class WaitingListMember(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class WaitingListContactInput(BaseModel):
+    """Schema for a contact to add to a waiting list by email.
+
+    If no contact exists with this email, one is created first.
+    """
+
+    email: EmailStr
+    """Email address used to find or create the contact. Required."""
+
+    first_name: Optional[str] = None
+    """First name to use if a new contact needs to be created."""
+
+    last_name: Optional[str] = None
+    """Last name to use if a new contact needs to be created."""
+
+
 class AddWaitingListMembersRequest(BaseModel):
     """Schema for adding members to a waiting list."""
 
-    contact_ids: list[UUID]
-    """List of contact IDs to add to the waiting list."""
+    contact_ids: list[UUID] = []
+    """List of existing contact IDs to add to the waiting list."""
+
+    contacts: list[WaitingListContactInput] = []
+    """Contacts to add by email, creating a contact first if none exists for that email."""
 
     status: str
     """Initial status for the members. Defaults to 'pending'."""

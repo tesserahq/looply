@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from app.db import get_db
 from app.schemas.waiting_list import (
@@ -207,10 +207,14 @@ def remove_member_from_waiting_list(
 @router.get("/{waiting_list_id}/members")
 def get_waiting_list_members(
     waiting_list_id: UUID,
+    email: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
-    """Get all members of a waiting list with their details."""
+    """Get members of a waiting list with their details.
+
+    Optionally filter by email (case-insensitive exact match).
+    """
     waiting_list_repository = WaitingListRepository(db)
 
     # Check if waiting list exists
@@ -220,7 +224,9 @@ def get_waiting_list_members(
             status_code=status.HTTP_404_NOT_FOUND, detail="Waiting list not found"
         )
 
-    members = waiting_list_repository.get_all_members_with_details(waiting_list_id)
+    members = waiting_list_repository.get_all_members_with_details(
+        waiting_list_id, email=email
+    )
 
     return {"waiting_list_id": waiting_list_id, "members": members}
 

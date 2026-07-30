@@ -1,5 +1,6 @@
 from typing import List, Optional
 from uuid import UUID
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.models.waiting_list import WaitingList
 from app.models.waiting_list_member import WaitingListMember
@@ -520,25 +521,32 @@ class WaitingListRepository(SoftDeleteRepository[WaitingList]):
                 updated_count += 1
         return updated_count
 
-    def get_all_members_with_details(self, waiting_list_id: UUID) -> List[dict]:
+    def get_all_members_with_details(
+        self, waiting_list_id: UUID, email: Optional[str] = None
+    ) -> List[dict]:
         """
         Get all members with their full details including status.
 
         Args:
             waiting_list_id: The ID of the waiting list
+            email: Optional email to filter members by (case-insensitive)
 
         Returns:
             List[dict]: List of members with contact details and status
         """
         from app.schemas.contact import Contact as ContactSchema
 
-        members = (
+        query = (
             self.db.query(WaitingListMember, Contact)
             .join(Contact, WaitingListMember.contact_id == Contact.id)
             .filter(WaitingListMember.waiting_list_id == waiting_list_id)
             .filter(WaitingListMember.deleted_at.is_(None))
-            .all()
         )
+
+        if email is not None:
+            query = query.filter(func.lower(Contact.email) == email.strip().lower())
+
+        members = query.all()
 
         result = []
         for member, contact in members:

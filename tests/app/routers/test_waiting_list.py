@@ -215,3 +215,99 @@ class TestWaitingListMembers:
             json={"contacts": [{"email": "someone@example.com"}]},
         )
         assert response.status_code == 404
+
+
+class TestGetWaitingListMembers:
+    """Test class for GET /waiting-lists/{waiting_list_id}/members."""
+
+    def test_list_all_members(
+        self, client_test_user: TestClient, test_waiting_list, test_contact, faker
+    ):
+        """Test listing all members when no email filter is provided."""
+        other_email = faker.unique.email()
+        client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={
+                "contact_ids": [str(test_contact.id)],
+                "contacts": [{"email": other_email}],
+            },
+        )
+
+        response = client_test_user.get(
+            f"/waiting-lists/{test_waiting_list.id}/members"
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["waiting_list_id"] == str(test_waiting_list.id)
+        assert len(data["members"]) == 2
+
+    def test_filter_members_by_email_match(
+        self, client_test_user: TestClient, test_waiting_list, test_contact, faker
+    ):
+        """Test filtering members by email returns the matching member."""
+        other_email = faker.unique.email()
+        client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={
+                "contact_ids": [str(test_contact.id)],
+                "contacts": [{"email": other_email}],
+            },
+        )
+
+        response = client_test_user.get(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            params={"email": test_contact.email},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["members"]) == 1
+        assert data["members"][0]["contact"]["email"] == test_contact.email
+        assert data["members"][0]["contact_id"] == str(test_contact.id)
+
+    def test_filter_members_by_email_no_match(
+        self, client_test_user: TestClient, test_waiting_list, test_contact
+    ):
+        """Test filtering by an unknown email returns an empty members list."""
+        client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={"contact_ids": [str(test_contact.id)]},
+        )
+
+        response = client_test_user.get(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            params={"email": "not-on-list@example.com"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["members"] == []
+
+    def test_filter_members_by_email_case_insensitive(
+        self, client_test_user: TestClient, test_waiting_list, test_contact
+    ):
+        """Test that email filtering is case-insensitive."""
+        client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={"contact_ids": [str(test_contact.id)]},
+        )
+
+        response = client_test_user.get(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            params={"email": test_contact.email.upper()},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["members"]) == 1
+        assert data["members"][0]["contact"]["email"] == test_contact.email
+
+    def test_filter_members_waiting_list_not_found(self, client_test_user: TestClient):
+        """Test filtering members on a non-existent waiting list returns 404."""
+        fake_id = str(uuid4())
+        response = client_test_user.get(
+            f"/waiting-lists/{fake_id}/members",
+            params={"email": "someone@example.com"},
+        )
+        assert response.status_code == 404

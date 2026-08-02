@@ -5,11 +5,15 @@ from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 
+from app.models.contact import Contact
+from app.models.waiting_list import WaitingList
+from app.models.waiting_list_member import WaitingListMember
 from app.schemas.contact import ContactCreateRequest
 from app.schemas.waiting_list import WaitingListContactInput
 from app.repositories.contact_repository import ContactRepository
 from app.repositories.waiting_list_repository import WaitingListRepository
 from app.commands.contact.create_contact_command import CreateContactCommand
+from app.events.waiting_list_events import build_waiting_list_contact_added_event
 from tessera_sdk.infra.events.nats_router import NatsEventPublisher
 
 
@@ -28,7 +32,10 @@ class AddContactsByEmailToWaitingListCommand:
         self.db = db
         self.contact_repository = ContactRepository(db)
         self.waiting_list_repository = WaitingListRepository(db)
-        self.create_contact_command = CreateContactCommand(db, nats_publisher)
+        self.nats_publisher = (
+            nats_publisher if nats_publisher is not None else NatsEventPublisher()
+        )
+        self.create_contact_command = CreateContactCommand(db, self.nats_publisher)
         self.logger = logging.getLogger(__name__)
 
     def execute(
@@ -50,6 +57,10 @@ class AddContactsByEmailToWaitingListCommand:
         Returns:
             int: Number of contacts successfully added to the waiting list
         """
+        waiting_list = self.waiting_list_repository.get_waiting_list(waiting_list_id)
+        if not waiting_list:
+            return 0
+
         added_count = 0
         for entry in contacts:
             email = entry.email.strip().lower()
@@ -71,6 +82,30 @@ class AddContactsByEmailToWaitingListCommand:
                 waiting_list_id, contact.id, status
             )
             if member:
+                self._publish_contact_added_event(waiting_list, contact, member)
                 added_count += 1
 
         return added_count
+
+    def _publish_contact_added_event(
+        self,
+        waiting_list: WaitingList,
+        contact: Contact,
+        member: WaitingListMember,
+    ) -> None:
+        """
+        Publish a waiting-list contact-added event.
+
+        Args:
+            waiting_list: The waiting list the contact was added to
+            contact: The contact that was added
+            member: The waiting list membership record
+        """
+        event = build_waiting_list_contact_added_event(waiting_list, contact, member)
+        if self.nats_publisher is not None:
+            try:
+                self.nats_publisher.publish_sync(event, event.event_type)
+            except Exception:  # pragma: no cover - defensive logging
+                self.logger.exception(
+                    "Failed to publish waiting-list contact-added event to NATS"
+                )

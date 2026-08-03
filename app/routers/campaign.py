@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from uuid import UUID
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
 
 from app.db import get_db
 from app.constants.campaign import CampaignStatus
+from app.models.campaign import Campaign as CampaignModel
 from app.schemas.campaign import (
     Campaign,
     CampaignCreate,
@@ -15,6 +15,7 @@ from app.schemas.campaign import (
 )
 from app.repositories.campaign_repository import CampaignRepository
 from app.repositories.contact_list_repository import ContactListRepository
+from app.routers.utils.dependencies import get_campaign_by_id
 from app.schemas.user import User
 from tessera_sdk.server.dependencies.auth import get_current_user
 from app.auth.rbac import build_rbac_dependencies
@@ -64,53 +65,38 @@ def list_campaigns(
 
 @router.get("/{campaign_id}", response_model=Campaign)
 def get_campaign(
-    campaign_id: UUID,
-    db: Session = Depends(get_db),
+    campaign: CampaignModel = Depends(get_campaign_by_id),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get a campaign by ID."""
-    campaign = CampaignRepository(db).get_campaign(campaign_id)
-    if not campaign:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-        )
     return campaign
 
 
 @router.put("/{campaign_id}", response_model=Campaign)
 def update_campaign(
-    campaign_id: UUID,
-    campaign: CampaignUpdate,
+    campaign_data: CampaignUpdate,
+    existing_campaign: CampaignModel = Depends(get_campaign_by_id),
     db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Update a draft campaign. Only allowed while status is 'draft'."""
-    campaign_repository = CampaignRepository(db)
-    existing_campaign = campaign_repository.get_campaign(campaign_id)
-    if not existing_campaign:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-        )
     if existing_campaign.status != CampaignStatus.DRAFT.value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Campaign {campaign_id} is not in draft status and cannot be updated",
+            detail=f"Campaign {existing_campaign.id} is not in draft status and cannot be updated",
         )
 
-    return campaign_repository.update_campaign(campaign_id, campaign)
+    return CampaignRepository(db).update_campaign(existing_campaign.id, campaign_data)
 
 
 @router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_campaign(
-    campaign_id: UUID,
+    existing_campaign: CampaignModel = Depends(get_campaign_by_id),
     db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["delete"]),
 ):
     """Delete a campaign."""
-    if not CampaignRepository(db).delete_campaign(campaign_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-        )
+    CampaignRepository(db).delete_campaign(existing_campaign.id)
 
 
 @router.post(
@@ -119,24 +105,16 @@ def delete_campaign(
     status_code=status.HTTP_200_OK,
 )
 def send_campaign(
-    campaign_id: UUID,
+    campaign: CampaignModel = Depends(get_campaign_by_id),
     db: Session = Depends(get_db),
     # Sending mutates the campaign (draft -> sending), so it's gated the same
     # as update rather than introducing a separate RBAC action for it.
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Send a draft campaign to its contact list via Sendly."""
-    campaign_repository = CampaignRepository(db)
-    campaign = campaign_repository.get_campaign(campaign_id)
-    if not campaign:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Campaign {campaign_id} not found",
-        )
-
     try:
         command = SendCampaignCommand(db)
-        sent_campaign = command.execute(campaign_id)
+        sent_campaign = command.execute(campaign.id)
 
         return SendCampaignResponse(
             id=sent_campaign.id,

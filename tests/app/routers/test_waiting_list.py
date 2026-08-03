@@ -216,6 +216,52 @@ class TestWaitingListMembers:
         )
         assert response.status_code == 404
 
+    def test_re_add_member_by_contact_id_after_removal(
+        self, client_test_user: TestClient, test_waiting_list, test_contact
+    ):
+        """Re-adding a previously removed member by contact_id should succeed, not 500."""
+        add_response = client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={"contact_ids": [str(test_contact.id)]},
+        )
+        assert add_response.status_code == 200
+
+        remove_response = client_test_user.delete(
+            f"/waiting-lists/{test_waiting_list.id}/members/{test_contact.id}"
+        )
+        assert remove_response.status_code == 204
+
+        re_add_response = client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={"contact_ids": [str(test_contact.id)]},
+        )
+
+        assert re_add_response.status_code == 200
+        assert re_add_response.json()["added_count"] == 1
+
+    def test_re_add_member_by_email_after_removal(
+        self, client_test_user: TestClient, test_waiting_list, test_contact
+    ):
+        """Re-adding a previously removed member by email should succeed, not 500."""
+        add_response = client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={"contacts": [{"email": test_contact.email}]},
+        )
+        assert add_response.status_code == 200
+
+        remove_response = client_test_user.delete(
+            f"/waiting-lists/{test_waiting_list.id}/members/{test_contact.id}"
+        )
+        assert remove_response.status_code == 204
+
+        re_add_response = client_test_user.post(
+            f"/waiting-lists/{test_waiting_list.id}/members",
+            json={"contacts": [{"email": test_contact.email}]},
+        )
+
+        assert re_add_response.status_code == 200
+        assert re_add_response.json()["added_count"] == 1
+
 
 class TestGetWaitingListMembers:
     """Test class for GET /waiting-lists/{waiting_list_id}/members."""

@@ -3,6 +3,7 @@ from uuid import uuid4
 from datetime import datetime
 from app.schemas.contact_list import ContactListCreate, ContactListUpdate
 from app.repositories.contact_list_repository import ContactListRepository
+from app.repositories.contact_repository import ContactRepository
 
 
 @pytest.fixture
@@ -350,6 +351,83 @@ def test_contact_count_excludes_soft_deleted_members(
 
     db.refresh(test_contact_list)
     assert test_contact_list.contact_count == 0
+
+
+def test_contact_count_excludes_soft_deleted_contact(
+    db, test_contact_list, test_contact
+):
+    """Test that contact_count drops when the underlying contact is soft-deleted
+    (rather than explicitly removed from the list)."""
+    list_repo = ContactListRepository(db)
+    contact_repo = ContactRepository(db)
+
+    list_repo.add_contact_to_list(test_contact_list.id, test_contact.id)
+    db.refresh(test_contact_list)
+    assert test_contact_list.contact_count == 1
+
+    contact_repo.delete_contact(test_contact.id)
+
+    db.refresh(test_contact_list)
+    assert test_contact_list.contact_count == 0
+    assert list_repo.get_list_member_count(test_contact_list.id) == 0
+    assert list_repo.get_list_members(test_contact_list.id) == []
+
+
+def test_contact_count_matches_member_count_after_hard_delete(
+    db, test_contact_list, test_contact
+):
+    """Test that contact_count stays consistent with get_list_member_count
+    when the underlying contact is hard-deleted."""
+    list_repo = ContactListRepository(db)
+    contact_repo = ContactRepository(db)
+
+    list_repo.add_contact_to_list(test_contact_list.id, test_contact.id)
+    contact_repo.hard_delete_contact(test_contact.id)
+
+    db.refresh(test_contact_list)
+    assert test_contact_list.contact_count == 0
+    assert list_repo.get_list_member_count(test_contact_list.id) == 0
+
+
+def test_contact_count_matches_member_list_length(
+    db, test_contact_list, test_contact, faker, test_user
+):
+    """contact_count should always equal len(get_list_members(...))."""
+    from app.models.contact import Contact
+
+    list_repo = ContactListRepository(db)
+    contact_repo = ContactRepository(db)
+
+    other_contact = Contact(
+        first_name=faker.first_name(),
+        last_name=faker.last_name(),
+        contact_type="business",
+        phone_type="work",
+        is_active=True,
+        created_by_id=test_user.id,
+    )
+    db.add(other_contact)
+    db.commit()
+    db.refresh(other_contact)
+
+    list_repo.add_contact_to_list(test_contact_list.id, test_contact.id)
+    list_repo.add_contact_to_list(test_contact_list.id, other_contact.id)
+    db.refresh(test_contact_list)
+    assert test_contact_list.contact_count == len(
+        list_repo.get_list_members(test_contact_list.id)
+    )
+
+    contact_repo.delete_contact(test_contact.id)
+    db.refresh(test_contact_list)
+    assert test_contact_list.contact_count == len(
+        list_repo.get_list_members(test_contact_list.id)
+    )
+
+    list_repo.remove_contact_from_list(test_contact_list.id, other_contact.id)
+    db.refresh(test_contact_list)
+    assert test_contact_list.contact_count == len(
+        list_repo.get_list_members(test_contact_list.id)
+    )
 
 
 def test_contact_list_pagination(db, test_contact_list, faker, test_user):

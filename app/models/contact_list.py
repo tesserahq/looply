@@ -30,15 +30,19 @@ class ContactList(Base, TimestampMixin, SoftDeleteMixin):
         super().__init__(**kwargs)
 
 
-# Defined after class to avoid circular import with ContactListMember
+# Defined after class to avoid circular import with ContactListMember/Contact
 from app.models.contact_list_member import ContactListMember  # noqa: E402
+from app.models.contact import Contact  # noqa: E402
 
 ContactList.contact_count = column_property(
     select(func.count(ContactListMember.id))
+    .select_from(ContactListMember)
+    .join(Contact, Contact.id == ContactListMember.contact_id)
     .where(
         ContactListMember.contact_list_id == ContactList.id,
         ContactListMember.deleted_at.is_(None),
+        Contact.deleted_at.is_(None),
     )
-    .correlate_except(ContactListMember)
+    .correlate_except(ContactListMember, Contact)
     .scalar_subquery()
 )

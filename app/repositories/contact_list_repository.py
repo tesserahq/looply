@@ -422,8 +422,10 @@ class ContactListRepository(SoftDeleteRepository[ContactList]):
         """
         return (
             self.db.query(ContactListMember)
+            .join(Contact, Contact.id == ContactListMember.contact_id)
             .filter(ContactListMember.contact_list_id == contact_list_id)
             .filter(ContactListMember.deleted_at.is_(None))
+            .filter(Contact.deleted_at.is_(None))
             .count()
         )
 

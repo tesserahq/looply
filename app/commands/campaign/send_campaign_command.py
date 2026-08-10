@@ -83,14 +83,17 @@ class SendCampaignCommand:
         if not campaign.template_id:
             raise ValueError(f"Campaign {campaign_id} has no template_id to send")
 
-        recipients = self._resolve_recipients(campaign.contact_list_id)
-        if not recipients:
+        contacts = self.contact_list_repository.get_eligible_campaign_recipients(
+            campaign.contact_list_id
+        )
+        if not contacts:
             # Sendly's recipients field requires at least 1 entry; fail fast
             # with a clear message instead of letting the SDK raise one.
             raise ValueError(
                 f"Campaign {campaign_id} has no eligible recipients "
                 "(active, with an email address) in its contact list"
             )
+        recipients = [self._to_broadcast_recipient(contact) for contact in contacts]
         self.last_recipient_count = len(recipients)
 
         request = SendBroadcastRequest(
@@ -115,7 +118,9 @@ class SendCampaignCommand:
             raise Exception(f"Failed to send campaign {campaign_id}: {str(e)}")
 
         updated_campaign = self.campaign_repository.mark_sending(
-            campaign_id, response.batch_id
+            campaign_id,
+            response.batch_id,
+            recipient_contact_ids=[contact.id for contact in contacts],
         )
         if updated_campaign is None:
             # Sendly accepted this request's broadcast, but a concurrent
@@ -124,13 +129,6 @@ class SendCampaignCommand:
             # erroring, since this attempt didn't fail on its own terms.
             updated_campaign = self.campaign_repository.get_campaign(campaign_id)
         return updated_campaign
-
-    def _resolve_recipients(self, contact_list_id: UUID) -> list[BroadcastRecipient]:
-        """Map the contact list's eligible members to Sendly broadcast recipients."""
-        contacts = self.contact_list_repository.get_eligible_campaign_recipients(
-            contact_list_id
-        )
-        return [self._to_broadcast_recipient(contact) for contact in contacts]
 
     @staticmethod
     def _to_broadcast_recipient(contact: Contact) -> BroadcastRecipient:

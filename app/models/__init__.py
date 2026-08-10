@@ -6,6 +6,7 @@ from app.models.contact_interaction import ContactInteraction
 from app.models.waiting_list import WaitingList
 from app.models.waiting_list_member import WaitingListMember
 from app.models.campaign import Campaign
+from app.models.campaign_recipient import CampaignRecipient
 
 __all__ = [
     "User",
@@ -16,4 +17,5 @@ __all__ = [
     "WaitingList",
     "WaitingListMember",
     "Campaign",
+    "CampaignRecipient",
 ]

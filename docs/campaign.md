@@ -46,7 +46,7 @@ When a user sends a draft campaign, Looply:
 2. Keeps active contacts with an email address and deduplicates by email.
 3. Converts each contact into a Sendly broadcast recipient.
 4. Calls `SendlyClient.send_broadcast()` with the campaign's live template, variables, tags, and recipients.
-5. Stores the returned `batch_id` and changes the campaign to `sending`.
+5. Stores the returned `batch_id`, changes the campaign to `sending`, and records the resolved contacts as `CampaignRecipient` rows (`campaign_id`, `contact_id`) — a snapshot of who the campaign was sent to, since contact list membership can change afterward.
 
 Sendly then renders and sends asynchronously. It automatically excludes suppressed recipients.
 
@@ -124,6 +124,15 @@ Tags are free-form labels stored on Sendly's broadcast emails. Use them to group
 - Display Sendly's `queued_count`, `suppressed_count`, and `prepared_count` as progress information; do not copy them into Looply delivery records.
 
 For recipient-level outcomes or later reporting, query Sendly by `batch_id` (or campaign tags). Sendly remains the authoritative record for sent, delivered, opened, clicked, bounced, complained, and unsubscribed emails.
+
+## Recipient snapshot
+
+`CampaignRecipient` records which contacts a campaign was actually sent to, since the
+`contact_list_id` it points to can gain or lose members afterward. It stores only
+`campaign_id` and `contact_id` — a live reference, not a copy of the contact's email/name at
+send time — and is written once, in the same transaction as the `sending` status update, right
+after Sendly accepts the broadcast. It is not a delivery-event table: it has no per-recipient
+status, and delivery outcomes are still exclusively Sendly's concern (see above).
 
 ## Safe retries
 

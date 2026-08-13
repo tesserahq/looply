@@ -1,9 +1,10 @@
 from typing import List, Optional, Sequence
 from uuid import UUID
 from datetime import datetime, timezone
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 from app.models.campaign import Campaign
 from app.models.campaign_recipient import CampaignRecipient
+from app.models.contact import Contact
 from app.constants.campaign import CampaignStatus
 from app.schemas.campaign import CampaignCreate, CampaignUpdate
 from app.repositories.soft_delete_repository import SoftDeleteRepository
@@ -43,6 +44,30 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
             Query: SQLAlchemy query object for campaigns
         """
         return self.db.query(Campaign).order_by(Campaign.created_at.desc())
+
+    def get_recipients_by_campaign_query(self, campaign_id: UUID):
+        """
+        Get a query for a campaign's recipients, joined to their current
+        contact details, for pagination with fastapi-pagination.
+
+        Uses an inner join rather than the relationship's default lazy load
+        so that recipients whose contact has since been soft-deleted are
+        excluded (the global soft-delete filter turns the join into "no
+        matching row" and drops them), instead of surfacing a null contact.
+
+        Args:
+            campaign_id: The ID of the campaign
+
+        Returns:
+            Query: SQLAlchemy query object for the campaign's recipients
+        """
+        return (
+            self.db.query(CampaignRecipient)
+            .join(Contact, CampaignRecipient.contact_id == Contact.id)
+            .options(contains_eager(CampaignRecipient.contact))
+            .filter(CampaignRecipient.campaign_id == campaign_id)
+            .order_by(Contact.first_name, Contact.last_name, Contact.email)
+        )
 
     def get_campaigns_by_status(self, status: str) -> List[Campaign]:
         """

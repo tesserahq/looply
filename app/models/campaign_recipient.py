@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.mixins import TimestampMixin
 from sqlalchemy import Column, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
@@ -29,6 +29,12 @@ class CampaignRecipient(Base, TimestampMixin):
     contact_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=False
     )
+
+    # viewonly: reads join to the live Contact for display (e.g. the
+    # recipients list endpoint); writes still go through contact_id alone,
+    # so this doesn't turn the "live reference, not a copy" contract above
+    # into a snapshot.
+    contact = relationship("Contact", viewonly=True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

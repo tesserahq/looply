@@ -13,6 +13,7 @@ from app.schemas.campaign import (
     CampaignUpdate,
     SendCampaignResponse,
 )
+from app.schemas.campaign_recipient import CampaignRecipient as CampaignRecipientSchema
 from app.repositories.campaign_repository import CampaignRepository
 from app.repositories.contact_list_repository import ContactListRepository
 from app.routers.utils.dependencies import get_campaign_by_id
@@ -70,6 +71,23 @@ def get_campaign(
 ):
     """Get a campaign by ID."""
     return campaign
+
+
+@router.get("/{campaign_id}/recipients", response_model=Page[CampaignRecipientSchema])
+def list_campaign_recipients(
+    campaign: CampaignModel = Depends(get_campaign_by_id),
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
+    """List the recipients a campaign was sent to, paginated.
+
+    Empty for a campaign still in 'draft' status, since recipients are only
+    recorded once the send is accepted (see mark_sending).
+    """
+    campaign_repository = CampaignRepository(db)
+    return paginate(
+        db, campaign_repository.get_recipients_by_campaign_query(campaign.id)
+    )
 
 
 @router.put("/{campaign_id}", response_model=Campaign)

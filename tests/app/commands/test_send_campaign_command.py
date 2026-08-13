@@ -7,6 +7,7 @@ from tessera_sdk.clients.sendly import SendBroadcastResponse
 
 from app.commands.campaign.send_campaign_command import SendCampaignCommand
 from app.constants.campaign import CampaignStatus
+from app.models.campaign_recipient import CampaignRecipient
 from app.repositories.campaign_repository import CampaignRepository
 from app.repositories.contact_list_repository import ContactListRepository
 
@@ -55,6 +56,14 @@ def test_send_campaign_success(db, draft_campaign, test_contact_list, test_conta
     assert sent_request.recipients[0].email == test_contact.email
     assert sent_request.recipients[0].attributes["job_title"] == test_contact.job
     assert sent_request.recipients[0].attributes["company"] == test_contact.company
+
+    recipient_rows = (
+        db.query(CampaignRecipient)
+        .filter(CampaignRecipient.campaign_id == draft_campaign.id)
+        .all()
+    )
+    assert len(recipient_rows) == 1
+    assert recipient_rows[0].contact_id == test_contact.id
 
 
 def test_send_campaign_not_found(db):
@@ -117,6 +126,14 @@ def test_send_campaign_marks_failed_after_exhausted_retries(
     assert campaign.status == CampaignStatus.FAILED.value
     # Every attempt reuses the same idempotency key, so retries are safe.
     assert len({c.idempotency_key for c in fake_client.calls}) == 1
+
+    # A failed send must not leave a recipient snapshot behind.
+    recipient_rows = (
+        db.query(CampaignRecipient)
+        .filter(CampaignRecipient.campaign_id == draft_campaign.id)
+        .all()
+    )
+    assert recipient_rows == []
 
 
 def test_send_campaign_retries_before_succeeding(

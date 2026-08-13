@@ -75,6 +75,42 @@ def test_mark_sending(db, draft_campaign):
     assert updated.sent_at is not None
 
 
+def test_mark_sending_records_recipient_snapshot(db, draft_campaign, test_contact):
+    from app.models.campaign_recipient import CampaignRecipient
+
+    repository = CampaignRepository(db)
+    repository.mark_sending(
+        draft_campaign.id, "batch-123", recipient_contact_ids=[test_contact.id]
+    )
+
+    recipients = (
+        db.query(CampaignRecipient)
+        .filter(CampaignRecipient.campaign_id == draft_campaign.id)
+        .all()
+    )
+    assert len(recipients) == 1
+    assert recipients[0].contact_id == test_contact.id
+
+
+def test_mark_sending_no_recipient_rows_when_campaign_not_draft(
+    db, sending_campaign, test_contact
+):
+    from app.models.campaign_recipient import CampaignRecipient
+
+    repository = CampaignRepository(db)
+    updated = repository.mark_sending(
+        sending_campaign.id, "batch-456", recipient_contact_ids=[test_contact.id]
+    )
+
+    assert updated is None
+    recipients = (
+        db.query(CampaignRecipient)
+        .filter(CampaignRecipient.campaign_id == sending_campaign.id)
+        .all()
+    )
+    assert recipients == []
+
+
 def test_mark_completed(db, sending_campaign):
     repository = CampaignRepository(db)
     completed_at = datetime.now(timezone.utc)

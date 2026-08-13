@@ -1,8 +1,9 @@
-from typing import List, Optional
+from typing import List, Optional, Sequence
 from uuid import UUID
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models.campaign import Campaign
+from app.models.campaign_recipient import CampaignRecipient
 from app.constants.campaign import CampaignStatus
 from app.schemas.campaign import CampaignCreate, CampaignUpdate
 from app.repositories.soft_delete_repository import SoftDeleteRepository
@@ -121,9 +122,15 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
         query = apply_filters(query, Campaign, filters)
         return query.all()
 
-    def mark_sending(self, campaign_id: UUID, batch_id: str) -> Optional[Campaign]:
+    def mark_sending(
+        self,
+        campaign_id: UUID,
+        batch_id: str,
+        recipient_contact_ids: Sequence[UUID] = (),
+    ) -> Optional[Campaign]:
         """
-        Move a campaign to 'sending' after Sendly accepts the broadcast.
+        Move a campaign to 'sending' after Sendly accepts the broadcast, and
+        record the audience that was sent to.
 
         Conditioned on the campaign still being 'draft' at write time (rather
         than an unconditional update) so that two concurrent send attempts for
@@ -131,9 +138,15 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
         transition, and the loser's write becomes a no-op instead of
         clobbering state set by the winner.
 
+        recipient_contact_ids is persisted as CampaignRecipient rows in the
+        same transaction as the status update, so a completed/sending
+        campaign is never left without its recipient snapshot (see
+        docs/campaign.md).
+
         Args:
             campaign_id: The ID of the campaign
             batch_id: The batch ID returned by Sendly
+            recipient_contact_ids: Contact IDs the broadcast was sent to
 
         Returns:
             Optional[Campaign]: The updated campaign, or None if the campaign
@@ -154,9 +167,17 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
                 synchronize_session=False,
             )
         )
-        self.db.commit()
         if not updated_rows:
+            self.db.commit()
             return None
+        if recipient_contact_ids:
+            self.db.bulk_save_objects(
+                [
+                    CampaignRecipient(campaign_id=campaign_id, contact_id=contact_id)
+                    for contact_id in recipient_contact_ids
+                ]
+            )
+        self.db.commit()
         return self.get_campaign(campaign_id)
 
     def mark_completed(self, campaign_id: UUID, completed_at: datetime) -> Campaign:

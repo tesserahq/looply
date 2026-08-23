@@ -231,9 +231,7 @@ def get_list_members(
             status_code=status.HTTP_404_NOT_FOUND, detail="Contact list not found"
         )
 
-    return paginate(
-        db, contact_list_repository.get_list_members_query(contact_list_id)
-    )
+    return paginate(db, contact_list_repository.get_list_members_query(contact_list_id))
 
 
 @router.get("/{contact_list_id}/members/count", response_model=MemberCountResponse)

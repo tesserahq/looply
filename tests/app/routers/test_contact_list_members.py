@@ -134,8 +134,8 @@ def test_get_list_members(
     assert response.status_code == 200
 
     data = response.json()
-    assert data["contact_list_id"] == str(test_contact_list.id)
-    assert len(data["members"]) == 2
+    assert data["total"] == 2
+    assert len(data["items"]) == 2
 
 
 def test_get_list_members_empty(client_test_user: TestClient, test_contact_list):
@@ -144,8 +144,8 @@ def test_get_list_members_empty(client_test_user: TestClient, test_contact_list)
     assert response.status_code == 200
 
     data = response.json()
-    assert data["contact_list_id"] == str(test_contact_list.id)
-    assert len(data["members"]) == 0
+    assert data["total"] == 0
+    assert len(data["items"]) == 0
 
 
 def test_get_list_members_nonexistent_list(client_test_user: TestClient):

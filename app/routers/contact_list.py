@@ -7,6 +7,7 @@ from fastapi_pagination.ext.sqlalchemy import paginate
 from typing import Dict, Any
 
 from app.db import get_db
+from app.schemas.contact import Contact as ContactSchema
 from app.schemas.contact_list import (
     ContactList,
     ContactListCreate,
@@ -15,7 +16,6 @@ from app.schemas.contact_list import (
     ContactListSubscription,
     AddMembersRequest,
     MemberCountResponse,
-    ListMembersResponse,
     SubscribeResponse,
 )
 from app.repositories.contact_list_repository import ContactListRepository
@@ -215,13 +215,13 @@ def remove_member_from_list(
         )
 
 
-@router.get("/{contact_list_id}/members", response_model=ListMembersResponse)
+@router.get("/{contact_list_id}/members", response_model=Page[ContactSchema])
 def get_list_members(
     contact_list_id: UUID,
     db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
-    """Get all members of a contact list."""
+    """Get all members of a contact list, paginated."""
     contact_list_repository = ContactListRepository(db)
 
     # Check if contact list exists
@@ -231,10 +231,8 @@ def get_list_members(
             status_code=status.HTTP_404_NOT_FOUND, detail="Contact list not found"
         )
 
-    members = contact_list_repository.get_list_members(contact_list_id)
-
-    return ListMembersResponse(
-        contact_list_id=contact_list_id, members=members  # type: ignore[arg-type]
+    return paginate(
+        db, contact_list_repository.get_list_members_query(contact_list_id)
     )
 
 

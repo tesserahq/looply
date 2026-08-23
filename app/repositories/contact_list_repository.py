@@ -303,6 +303,25 @@ class ContactListRepository(SoftDeleteRepository[ContactList]):
             .all()
         )
 
+    def get_list_members_query(self, contact_list_id: UUID):
+        """
+        Get a query for the active members (contacts) in a contact list.
+        This is useful for pagination with fastapi-pagination.
+
+        Args:
+            contact_list_id: The ID of the contact list
+
+        Returns:
+            Query: SQLAlchemy query object for contacts in the list
+        """
+        return (
+            self.db.query(Contact)
+            .join(ContactListMember, Contact.id == ContactListMember.contact_id)
+            .filter(ContactListMember.contact_list_id == contact_list_id)
+            .filter(ContactListMember.deleted_at.is_(None))
+            .order_by(ContactListMember.created_at.desc())
+        )
+
     def get_eligible_campaign_recipients(self, contact_list_id: UUID) -> List[Contact]:
         """
         Get the contacts eligible to receive a campaign send for a contact list:

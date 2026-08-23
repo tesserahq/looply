@@ -239,7 +239,7 @@ def test_clear_list_members(
     get_response = client_test_user.get(
         f"/contact-lists/{test_contact_list.id}/members"
     )
-    assert len(get_response.json()["members"]) == 0
+    assert len(get_response.json()["items"]) == 0
 
 
 def test_get_contact_lists_for_contact(

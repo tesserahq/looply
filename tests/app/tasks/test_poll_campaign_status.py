@@ -29,6 +29,10 @@ def test_poll_marks_completed_when_finished(db, sending_campaign, monkeypatch):
                 suppressed_count=0,
                 prepared_count=10,
                 finished=True,
+                delivered_count=10,
+                bounced_count=0,
+                complained_count=0,
+                opened_count=0,
             )
         }
     )
@@ -52,6 +56,10 @@ def test_poll_leaves_status_when_not_finished(db, sending_campaign, monkeypatch)
                 suppressed_count=0,
                 prepared_count=4,
                 finished=False,
+                delivered_count=4,
+                bounced_count=0,
+                complained_count=0,
+                opened_count=0,
             )
         }
     )
@@ -109,6 +117,10 @@ def test_poll_continues_after_one_campaign_errors(
                 suppressed_count=0,
                 prepared_count=1,
                 finished=True,
+                delivered_count=1,
+                bounced_count=0,
+                complained_count=0,
+                opened_count=0,
             )
         },
         error_batch_ids={sending_campaign.batch_id},

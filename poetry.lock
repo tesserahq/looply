@@ -844,20 +844,6 @@ rabbit = ["aio-pika (>=9,<10)"]
 redis = ["redis (>=5.0.0,<8.0.0)"]
 
 [[package]]
-name = "fernet"
-version = "1.0.1"
-description = "A simple python fernet implementation"
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "fernet-1.0.1.tar.gz", hash = "sha256:c50a51c997e09199695b51761bdc090ccf4129917520681e69dcfff4355325c7"},
-]
-
-[package.dependencies]
-pyaes = "*"
-
-[[package]]
 name = "googleapis-common-protos"
 version = "1.75.0"
 description = "Common protobufs used in Google APIs"
@@ -1822,17 +1808,6 @@ files = [
 ]
 
 [[package]]
-name = "pyaes"
-version = "1.6.1"
-description = "Pure-Python Implementation of the AES block-cipher and common modes of operation"
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "pyaes-1.6.1.tar.gz", hash = "sha256:02c1b1405c38d3c370b085fb952dd8bea3fadcee6411ad99f312cc129c536d8f"},
-]
-
-[[package]]
 name = "pyasn1"
 version = "0.6.4"
 description = "Pure-Python implementation of ASN.1 types and DER/BER/CER codecs (X.208)"
@@ -2753,4 +2728,4 @@ dev = ["pytest", "setuptools"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<3.15"
-content-hash = "5fba624b584cc25fae5e421eb5ef119908e2c60123adfe5d42dc7aefa1ad1e14"
+content-hash = "13aa7dab78bfcf7125fe8f3a9044f7567ed15eb0316d00c06d20a816515b7feb"

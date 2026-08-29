@@ -102,7 +102,7 @@ class SendCampaignCommand:
             template_variables=campaign.template_variables,
             from_email=campaign.from_email,
             subject=campaign.subject,
-            tags=campaign.tags,
+            tags=[*campaign.tags, f"campaign:{str(campaign.id)[:8]}"],
             # Retrying the same campaign must never create a second broadcast.
             idempotency_key=f"campaign:{campaign.id}",
             recipients=recipients,

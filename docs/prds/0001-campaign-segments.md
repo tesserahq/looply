@@ -107,13 +107,21 @@ whether segments end up list-scoped or not.
   `complained_count`, `opened_count`, `clicked_count`) — currently nothing is stored; today's
   `poll_campaign_status` task only reads `finished` to flip status, then discards the rest of the
   response.
+- **Send-flow change** (prerequisite for the task below): `_to_broadcast_recipient` in
+  `app/commands/campaign/send_campaign_command.py` must set `client_reference_id` on each
+  `BroadcastRecipient` (e.g. to `contact.id`) when building the broadcast send. This costs nothing
+  at send time and is what makes the polling task below able to match results back to a contact
+  without relying on the (mutable) email address — see "Known Risks" for why matching by email is
+  unsafe.
 - **New background task**, following the existing `poll_campaign_status` pattern
   (`app/tasks/poll_campaign_status.py`, same `build_sendly_client()` + per-item try/except so one
   bad lookup doesn't stop the batch): for each `completed` campaign still inside its polling
-  window, call the SDK's `iter_emails(batch_id=batch_id)` (not `list_emails()` — the plain method
-  returns only a single page; `iter_emails()` transparently walks every page so campaigns with
-  more than 50 recipients aren't silently truncated) and update matching `CampaignRecipient` rows'
-  `opened_at`/`clicked_at`, and call `get_broadcast()` to refresh the campaign's result counts.
+  window, call the SDK's `iter_broadcast_recipients(batch_id=batch_id)` (not
+  `list_broadcast_recipients()` — the plain method returns only a single page; the iterator
+  transparently walks every page so campaigns with more than 50 recipients aren't silently
+  truncated) and, for each `BroadcastRecipientResult`, match its `client_reference_id` back to the
+  corresponding `CampaignRecipient`/`Contact` and update `opened_at`/`clicked_at`. Also call
+  `get_broadcast()` to refresh the campaign's result counts.
 - **Polling window**: a fixed, globally-configured duration (e.g. via app settings, defaulting to
   3 days) after `completed_at`, after which the task stops polling that campaign. Per-campaign
   override is explicitly out of scope for Phase 1 (see "Out of Scope") — global config only, to
@@ -288,28 +296,35 @@ and `tessera-sdk-py` (both under `~/sites/linden-family/`) as of 2026-08-29.
   `clicked_count` respectively, and the SDK's `GetBroadcastResponse` is in sync. No further action
   needed — Phase 1 can be implemented as written.
 
-- **[RESOLVED] Pagination on `list_emails()`.** Sendly's `GET /emails` endpoint
-  (`sendly/app/routers/email.py`) implements proper server-side pagination via
-  `fastapi-pagination`, returning `total`/`page`/`size`/`pages` metadata. The SDK's
-  `SendlyClient.list_emails()` still returns a single page, but
-  `tessera-sdk-py/tessera_sdk/clients/sendly/client.py` now also exposes
-  `iter_emails(project_id=..., batch_id=..., tag=..., status=..., size=...)`, a generator that
-  transparently loops `page` until `page >= pages` and yields every matching email across all
-  pages. Phase 1's background task should call `iter_emails(batch_id=batch_id)` rather than
-  `list_emails()` directly, so a broadcast with more than one page of recipients (>50 by default)
-  is fully consumed rather than silently truncated. The same fix was applied to
-  `list_broadcast_recipients()` via a parallel `iter_broadcast_recipients()` generator, since it
-  had the identical single-page limitation — worth using instead of `iter_emails()` if Phase 1
-  ends up preferring `list_broadcast_recipients`'s typed, `client_reference_id`-aware response
-  (see the mutable-email finding below).
+- **[RESOLVED] Pagination on `list_emails()`/`list_broadcast_recipients()`.** Sendly's paginated
+  endpoints (`sendly/app/routers/email.py`, `.../broadcasts/{batch_id}/recipients`) return proper
+  `total`/`page`/`size`/`pages` metadata, but the SDK's plain `list_emails()` and
+  `list_broadcast_recipients()` each still return a single page. Merged into `tessera-sdk-py`:
+  `iter_emails(...)` and `iter_broadcast_recipients(...)`, generators that transparently loop
+  `page` until `page >= pages` and yield every matching row across all pages. Phase 1's polling
+  task should use `iter_broadcast_recipients(batch_id=batch_id)` specifically (not `iter_emails`)
+  — its `BroadcastRecipientResult` carries `client_reference_id` back, which is what resolves the
+  mutable-email risk below.
 
-- **[OPEN] Engagement can't reliably map back to a mutable contact.** `CampaignRecipient` stores
-  only `campaign_id` and `contact_id`; the polling task is expected to match Sendly results by
-  recipient email. If a contact's email changes after a campaign was sent, polling returns the
-  old address, matches nothing, and that recipient is permanently misclassified as a non-opener.
-  **Action required**: add an immutable `sent_email` column to `CampaignRecipient`, populated in
-  the same transaction as the send snapshot, and match Sendly rows against
-  `(campaign_id, sent_email)` rather than the contact's current (mutable) email. Add to Phase 1.
+- **[OPEN, cheaper fix now available] Engagement can't reliably map back to a mutable contact.**
+  `CampaignRecipient` stores only `campaign_id` and `contact_id`; the polling task is expected to
+  match Sendly results by recipient email. If a contact's email changes after a campaign was sent,
+  polling returns the old address, matches nothing, and that recipient is permanently
+  misclassified as a non-opener.
+  Originally recommended: add an immutable `sent_email` column to `CampaignRecipient`. A cheaper
+  fix is now available instead — `tessera-sdk-py`'s `BroadcastRecipient` schema already has a
+  `client_reference_id: Optional[UUID]` field created exactly for this ("correlating this
+  recipient with its results later ... without matching on the mutable email address"), and
+  `iter_broadcast_recipients()` (added in the pagination fix above) returns it back on each
+  `BroadcastRecipientResult`. Confirmed as of 2026-08-29:
+  `app/commands/campaign/send_campaign_command.py`'s `_to_broadcast_recipient` (lines 134–146)
+  does **not** currently set `client_reference_id` when building the `BroadcastRecipient` sent to
+  Sendly, even though `mark_sending` (lines 120–124) already has `recipient_contact_ids` in hand
+  at send time. **Action required** (Phase 1): set `client_reference_id=contact.id` (or
+  `campaign_recipient.id`, if that row is created before send) in `_to_broadcast_recipient`, then
+  have the polling task match `iter_broadcast_recipients()` rows back to `CampaignRecipient` by
+  `client_reference_id` instead of by email — no new column needed, and the match survives a
+  contact's email changing after send.
 
 - **[OPEN] Unconstrained recursive rule trees are a resource-exhaustion surface.** The rule tree
   is currently specified as free-form recursive JSON with `Any` leaf values and open-ended

@@ -33,6 +33,7 @@ def test_poll_marks_completed_when_finished(db, sending_campaign, monkeypatch):
                 bounced_count=0,
                 complained_count=0,
                 opened_count=0,
+                clicked_count=0,
             )
         }
     )
@@ -60,6 +61,7 @@ def test_poll_leaves_status_when_not_finished(db, sending_campaign, monkeypatch)
                 bounced_count=0,
                 complained_count=0,
                 opened_count=0,
+                clicked_count=0,
             )
         }
     )
@@ -121,6 +123,7 @@ def test_poll_continues_after_one_campaign_errors(
                 bounced_count=0,
                 complained_count=0,
                 opened_count=0,
+                clicked_count=0,
             )
         },
         error_batch_ids={sending_campaign.batch_id},

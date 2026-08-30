@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from app.constants.campaign import CampaignStatus
@@ -118,6 +118,79 @@ def test_mark_completed(db, sending_campaign):
 
     assert updated.status == CampaignStatus.COMPLETED.value
     assert updated.completed_at is not None
+
+
+def test_mark_completed_sets_engagement_polling_expiry(db, sending_campaign):
+    from app.config import get_settings
+
+    repository = CampaignRepository(db)
+    completed_at = datetime.now(timezone.utc)
+    updated = repository.mark_completed(sending_campaign.id, completed_at)
+
+    expected_expiry = completed_at.replace(tzinfo=None) + timedelta(
+        days=get_settings().engagement_polling_window_days
+    )
+    assert updated.engagement_polling_expires_at == expected_expiry
+
+
+def test_get_campaigns_within_engagement_window(db, sending_campaign, draft_campaign):
+    repository = CampaignRepository(db)
+    now = datetime.now(timezone.utc)
+    repository.mark_completed(sending_campaign.id, now)
+
+    within_window = repository.get_campaigns_within_engagement_window(now)
+    assert [c.id for c in within_window] == [sending_campaign.id]
+
+    outside_window = repository.get_campaigns_within_engagement_window(
+        now + timedelta(days=999)
+    )
+    assert outside_window == []
+
+
+def test_update_campaign_engagement_counts_round_trips(db, sending_campaign):
+    repository = CampaignRepository(db)
+    synced_at = datetime.now(timezone.utc)
+    repository.update_campaign_engagement_counts(
+        sending_campaign.id,
+        delivered_count=10,
+        bounced_count=1,
+        complained_count=0,
+        opened_count=5,
+        clicked_count=2,
+        synced_at=synced_at,
+    )
+    db.commit()
+
+    updated = repository.get_campaign(sending_campaign.id)
+    assert updated.delivered_count == 10
+    assert updated.bounced_count == 1
+    assert updated.complained_count == 0
+    assert updated.opened_count == 5
+    assert updated.clicked_count == 2
+    assert updated.engagement_last_synced_at == synced_at.replace(tzinfo=None)
+
+
+def test_record_recipient_engagement_does_not_overwrite_existing_timestamp(
+    db, sending_campaign, test_contact
+):
+    from app.models.campaign_recipient import CampaignRecipient
+
+    first_open = datetime.now(timezone.utc) - timedelta(days=1)
+    recipient = CampaignRecipient(
+        campaign_id=sending_campaign.id, contact_id=test_contact.id, opened_at=first_open
+    )
+    db.add(recipient)
+    db.commit()
+
+    repository = CampaignRepository(db)
+    later_open = datetime.now(timezone.utc)
+    repository.record_recipient_engagement(
+        sending_campaign.id, test_contact.id, opened_at=later_open, clicked_at=None
+    )
+    db.commit()
+    db.refresh(recipient)
+
+    assert recipient.opened_at == first_open.replace(tzinfo=None)
 
 
 def test_mark_failed(db, draft_campaign):

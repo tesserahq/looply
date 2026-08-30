@@ -143,6 +143,10 @@ class SendCampaignCommand:
                 "job_title": contact.job,
                 "contact_type": contact.contact_type,
             },
+            # Lets poll_campaign_engagement match Sendly's per-recipient
+            # results back to this CampaignRecipient by contact_id instead of
+            # the mutable email address (see docs/campaign.md).
+            client_reference_id=contact.id,
         )
 
     def _send_with_retry(self, request: SendBroadcastRequest):

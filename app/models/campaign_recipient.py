@@ -1,6 +1,7 @@
+from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.mixins import TimestampMixin
-from sqlalchemy import Column, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
@@ -29,6 +30,12 @@ class CampaignRecipient(Base, TimestampMixin):
     contact_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=False
     )
+    # First-occurrence timestamps only, filled in by poll_campaign_engagement
+    # from Sendly's per-recipient results, matched by contact_id (sent as
+    # client_reference_id) rather than the mutable email address. Not a
+    # per-event log - see docs/campaign.md.
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    clicked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # viewonly: reads join to the live Contact for display (e.g. the
     # recipients list endpoint); writes still go through contact_id alone,

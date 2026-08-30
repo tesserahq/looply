@@ -33,7 +33,7 @@ class FakeSendlyClient:
         return self.broadcasts[batch_id]
 
 
-def _completed_campaign(db, faker, test_user, test_contact_list, *, expires_in_days=3):
+def _completed_campaign(db, faker, test_user, test_segment, *, expires_in_days=3):
     from app.constants.campaign import CampaignStatus
     from app.models.campaign import Campaign
 
@@ -41,7 +41,7 @@ def _completed_campaign(db, faker, test_user, test_contact_list, *, expires_in_d
     campaign = Campaign(
         name=faker.catch_phrase(),
         status=CampaignStatus.COMPLETED.value,
-        contact_list_id=test_contact_list.id,
+        segment_id=test_segment.id,
         project_id=uuid4(),
         template_id=uuid4(),
         batch_id=faker.uuid4(),
@@ -89,9 +89,9 @@ def _recipient_result(contact_id, **overrides):
 
 
 def test_updates_recipient_and_campaign_from_stubbed_response(
-    db, faker, test_user, test_contact_list, test_contact, monkeypatch
+    db, faker, test_user, test_segment, test_contact, monkeypatch
 ):
-    campaign = _completed_campaign(db, faker, test_user, test_contact_list)
+    campaign = _completed_campaign(db, faker, test_user, test_segment)
     db.add(CampaignRecipient(campaign_id=campaign.id, contact_id=test_contact.id))
     db.commit()
 
@@ -126,10 +126,10 @@ def test_updates_recipient_and_campaign_from_stubbed_response(
 
 
 def test_skips_campaign_outside_polling_window(
-    db, faker, test_user, test_contact_list, monkeypatch
+    db, faker, test_user, test_segment, monkeypatch
 ):
     campaign = _completed_campaign(
-        db, faker, test_user, test_contact_list, expires_in_days=-1
+        db, faker, test_user, test_segment, expires_in_days=-1
     )
     fake_client = FakeSendlyClient()
     monkeypatch.setattr(
@@ -144,10 +144,10 @@ def test_skips_campaign_outside_polling_window(
 
 
 def test_one_campaign_failure_does_not_stop_others(
-    db, faker, test_user, test_contact_list, monkeypatch
+    db, faker, test_user, test_segment, monkeypatch
 ):
-    failing = _completed_campaign(db, faker, test_user, test_contact_list)
-    succeeding = _completed_campaign(db, faker, test_user, test_contact_list)
+    failing = _completed_campaign(db, faker, test_user, test_segment)
+    succeeding = _completed_campaign(db, faker, test_user, test_segment)
 
     fake_client = FakeSendlyClient(
         broadcasts={succeeding.batch_id: _broadcast_response(succeeding.batch_id)},

@@ -17,7 +17,7 @@ from app.integrations.sendly_client_factory import build_sendly_client
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.repositories.campaign_repository import CampaignRepository
-from app.repositories.contact_list_repository import ContactListRepository
+from app.repositories.segment_repository import SegmentRepository
 
 # send_broadcast is a fast accept-only call (Sendly renders/delivers
 # asynchronously), and the idempotency key makes retrying the identical
@@ -29,7 +29,7 @@ _SEND_RETRY_DELAY_SECONDS = 1
 
 class SendCampaignCommand:
     """
-    Command to send a draft campaign to its contact list via Sendly.
+    Command to send a draft campaign to its segment's resolved audience via Sendly.
 
     Resolves eligible recipients, calls SendlyClient.send_broadcast(), and
     persists the resulting batch_id/status. This is the one place in the
@@ -46,7 +46,7 @@ class SendCampaignCommand:
     ):
         self.db = db
         self.campaign_repository = CampaignRepository(db)
-        self.contact_list_repository = ContactListRepository(db)
+        self.segment_repository = SegmentRepository(db)
         self.sendly_client = (
             sendly_client if sendly_client is not None else build_sendly_client()
         )
@@ -83,15 +83,21 @@ class SendCampaignCommand:
         if not campaign.template_id:
             raise ValueError(f"Campaign {campaign_id} has no template_id to send")
 
-        contacts = self.contact_list_repository.get_eligible_campaign_recipients(
-            campaign.contact_list_id
-        )
+        segment = self.segment_repository.get_segment(campaign.segment_id)
+        if not segment:
+            raise ValueError(f"Campaign {campaign_id} has no segment to send to")
+
+        # May raise SegmentResolutionError (a ValueError) if the segment's
+        # rule references a campaign that's since been deleted/un-completed -
+        # that's intentional: fail the send explicitly rather than silently
+        # resolving to a wider audience than the user intended.
+        contacts = self.campaign_repository.get_eligible_recipients_for_segment(segment)
         if not contacts:
             # Sendly's recipients field requires at least 1 entry; fail fast
             # with a clear message instead of letting the SDK raise one.
             raise ValueError(
                 f"Campaign {campaign_id} has no eligible recipients "
-                "(active, with an email address) in its contact list"
+                "(active, with an email address) in its segment"
             )
         recipients = [self._to_broadcast_recipient(contact) for contact in contacts]
         self.last_recipient_count = len(recipients)

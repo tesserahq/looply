@@ -7,19 +7,19 @@ from app.repositories.contact_list_repository import ContactListRepository
 from app.schemas.campaign import CampaignCreate, CampaignUpdate
 
 
-def test_create_campaign(db, faker, test_user, test_contact_list):
+def test_create_campaign(db, faker, test_user, test_segment):
     repository = CampaignRepository(db)
     campaign = repository.create_campaign(
         CampaignCreate(
             name=faker.catch_phrase(),
-            contact_list_id=test_contact_list.id,
+            segment_id=test_segment.id,
             created_by_id=test_user.id,
         )
     )
 
     assert campaign.id is not None
     assert campaign.status == CampaignStatus.DRAFT.value
-    assert campaign.contact_list_id == test_contact_list.id
+    assert campaign.segment_id == test_segment.id
     assert campaign.template_variables == {}
     assert campaign.tags == []
 
@@ -202,8 +202,14 @@ def test_mark_failed(db, draft_campaign):
     assert updated.status == CampaignStatus.FAILED.value
 
 
-def test_get_eligible_campaign_recipients_filters_and_dedupes(
-    db, test_contact_list, test_contact, inactive_contact, faker, test_user
+def test_get_eligible_recipients_for_segment_filters_and_dedupes(
+    db,
+    test_contact_list,
+    test_segment,
+    test_contact,
+    inactive_contact,
+    faker,
+    test_user,
 ):
     from app.models.contact import Contact
 
@@ -231,17 +237,16 @@ def test_get_eligible_campaign_recipients_filters_and_dedupes(
         test_contact_list.id, duplicate_email_contact.id
     )
 
-    recipients = contact_list_repository.get_eligible_campaign_recipients(
-        test_contact_list.id
-    )
+    repository = CampaignRepository(db)
+    recipients = repository.get_eligible_recipients_for_segment(test_segment)
 
     emails = [contact.email for contact in recipients]
     assert emails.count(test_contact.email) == 1
     assert inactive_contact.email not in emails
 
 
-def test_get_eligible_campaign_recipients_excludes_no_email(
-    db, test_contact_list, test_user, faker
+def test_get_eligible_recipients_for_segment_excludes_no_email(
+    db, test_contact_list, test_segment, test_user, faker
 ):
     from app.models.contact import Contact
 
@@ -262,8 +267,7 @@ def test_get_eligible_campaign_recipients_excludes_no_email(
         test_contact_list.id, no_email_contact.id
     )
 
-    recipients = contact_list_repository.get_eligible_campaign_recipients(
-        test_contact_list.id
-    )
+    repository = CampaignRepository(db)
+    recipients = repository.get_eligible_recipients_for_segment(test_segment)
 
     assert no_email_contact.id not in [c.id for c in recipients]

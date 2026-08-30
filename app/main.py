@@ -6,6 +6,7 @@ import rollbar
 from rollbar.logger import RollbarHandler
 from rollbar.contrib.fastapi import ReporterMiddleware as RollbarMiddleware
 from fastapi_pagination import add_pagination
+from fastapi_pagination.utils import disable_installed_extensions_check
 from tessera_sdk.server.health import get_livez_readyz_router
 from tessera_sdk.server.dependencies.auth import get_current_user
 from fastapi.openapi.utils import get_openapi
@@ -108,6 +109,10 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
 
     # Add pagination support
     add_pagination(app)
+    # A few endpoints (e.g. /contacts/contact-types) paginate a fixed in-memory list rather
+    # than a SQLAlchemy query, which would otherwise trigger a spurious "use the sqlalchemy
+    # extension" warning on every request.
+    disable_installed_extensions_check()
 
     return app
 

@@ -34,6 +34,17 @@ class TestContactRouter:
         assert contact["email"] == contact_data["email"]
         assert contact["created_by_id"] == contact_data["created_by_id"]
 
+    def test_create_contact_invalid_contact_type(self, client):
+        """Test POST /contacts rejects a contact_type outside the fixed enum."""
+        contact_data = {
+            "contact_type": "not-a-real-type",
+            "phone_type": "mobile",
+            "created_by_id": str(client.app.state.test_user.id),
+        }
+
+        response = client.post("/contacts", json=contact_data)
+        assert response.status_code == 422
+
     def test_create_contact_minimal_data(self, client):
         """Test POST /contacts with minimal required data."""
         contact_data = {
@@ -158,6 +169,13 @@ class TestContactRouter:
         assert contact["first_name"] == update_data["first_name"]
         assert contact["last_name"] == update_data["last_name"]
         assert contact["email"] == update_data["email"]
+
+    def test_update_contact_invalid_contact_type(self, client, test_contact):
+        """Test PUT /contacts/{contact_id} rejects a contact_type outside the fixed enum."""
+        update_data = {"contact_type": "not-a-real-type"}
+
+        response = client.put(f"/contacts/{test_contact.id}", json=update_data)
+        assert response.status_code == 422
 
     def test_update_contact_duplicate_email(
         self, client, test_contact, setup_contact, faker
@@ -510,3 +528,26 @@ class TestContactRouterSearch:
         data_lower = response_lower.json()
         data_upper = response_upper.json()
         assert data_lower["total"] == data_upper["total"]
+
+
+class TestContactTypesRouter:
+    """Test class for GET /contacts/contact-types."""
+
+    def test_list_contact_types(self, client):
+        """Returns all seven fixed contact types as paginated {id, name} pairs."""
+        response = client.get("/contacts/contact-types")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["total"] == 7
+        ids = {item["id"] for item in data["items"]}
+        assert ids == {
+            "personal",
+            "business",
+            "vendor",
+            "customer",
+            "partner",
+            "supplier",
+            "lead",
+        }
+        assert all(item["name"] == item["id"].capitalize() for item in data["items"])

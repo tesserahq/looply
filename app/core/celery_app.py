@@ -33,6 +33,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.poll_campaign_status",
         "schedule": 60.0,
     },
+    "poll-campaign-engagement": {
+        "task": "app.tasks.poll_campaign_engagement",
+        "schedule": 300.0,
+    },
 }
 
 # # Explicitly register tasks to ensure they're available

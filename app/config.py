@@ -66,6 +66,10 @@ class Settings(BaseSettings):
         default="looply-api",
         json_schema_extra={"env": "DB_APP_NAME"},
     )
+    engagement_polling_window_days: int = Field(
+        default=3,
+        json_schema_extra={"env": "ENGAGEMENT_POLLING_WINDOW_DAYS"},
+    )
 
     @model_validator(mode="before")
     def set_database_url(cls, values):

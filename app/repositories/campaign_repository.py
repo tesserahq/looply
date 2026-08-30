@@ -1,7 +1,9 @@
 from typing import List, Optional, Sequence
 from uuid import UUID
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import func
 from sqlalchemy.orm import Session, contains_eager
+from app.config import get_settings
 from app.models.campaign import Campaign
 from app.models.campaign_recipient import CampaignRecipient
 from app.models.contact import Contact
@@ -209,6 +211,10 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
         """
         Move a campaign to 'completed' once Sendly reports the send finished.
 
+        Also fixes engagement_polling_expires_at at completed_at plus the
+        global polling window, so poll_campaign_engagement knows exactly how
+        long to keep refreshing this campaign's opened_at/clicked_at data.
+
         Args:
             campaign_id: The ID of the campaign
             completed_at: When Sendly reported the send stage finished
@@ -219,9 +225,112 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
         db_campaign = self.db.query(Campaign).filter(Campaign.id == campaign_id).first()
         db_campaign.status = CampaignStatus.COMPLETED.value
         db_campaign.completed_at = completed_at
+        db_campaign.engagement_polling_expires_at = completed_at + timedelta(
+            days=get_settings().engagement_polling_window_days
+        )
         self.db.commit()
         self.db.refresh(db_campaign)
         return db_campaign
+
+    def get_campaigns_within_engagement_window(self, now: datetime) -> List[Campaign]:
+        """
+        Completed campaigns still inside their bounded engagement-polling
+        window (see mark_completed).
+
+        Args:
+            now: The current time to compare each campaign's
+                engagement_polling_expires_at against
+
+        Returns:
+            List[Campaign]: Completed campaigns still worth polling
+        """
+        return (
+            self.db.query(Campaign)
+            .filter(
+                Campaign.status == CampaignStatus.COMPLETED.value,
+                Campaign.engagement_polling_expires_at.isnot(None),
+                Campaign.engagement_polling_expires_at > now,
+            )
+            .all()
+        )
+
+    def record_recipient_engagement(
+        self,
+        campaign_id: UUID,
+        contact_id: UUID,
+        *,
+        opened_at: Optional[datetime],
+        clicked_at: Optional[datetime],
+    ) -> None:
+        """
+        Fill in a recipient's first-occurrence opened_at/clicked_at from a
+        Sendly poll result.
+
+        Uses COALESCE so this can never erase or move back a timestamp a
+        prior poll already recorded, and never overwrite a real timestamp
+        with a null one. Does not commit - callers persist alongside the
+        rest of that campaign's poll pass (see poll_campaign_engagement) so
+        engagement_last_synced_at only advances on a fully successful pass.
+
+        Args:
+            campaign_id: The campaign this recipient belongs to
+            contact_id: The contact the poll result maps to (matched via
+                client_reference_id, not the mutable email address)
+            opened_at: Earliest known open from this poll, if any
+            clicked_at: Earliest known click from this poll, if any
+        """
+        self.db.query(CampaignRecipient).filter(
+            CampaignRecipient.campaign_id == campaign_id,
+            CampaignRecipient.contact_id == contact_id,
+        ).update(
+            {
+                CampaignRecipient.opened_at: func.coalesce(
+                    CampaignRecipient.opened_at, opened_at
+                ),
+                CampaignRecipient.clicked_at: func.coalesce(
+                    CampaignRecipient.clicked_at, clicked_at
+                ),
+            },
+            synchronize_session=False,
+        )
+
+    def update_campaign_engagement_counts(
+        self,
+        campaign_id: UUID,
+        *,
+        delivered_count: int,
+        bounced_count: int,
+        complained_count: int,
+        opened_count: int,
+        clicked_count: int,
+        synced_at: datetime,
+    ) -> None:
+        """
+        Refresh a campaign's result counts and mark it synced as of `synced_at`.
+
+        Does not commit - see record_recipient_engagement for why: the
+        caller commits once, after this campaign's whole poll pass succeeds.
+
+        Args:
+            campaign_id: The campaign to update
+            delivered_count: Sendly's current delivered_count
+            bounced_count: Sendly's current bounced_count
+            complained_count: Sendly's current complained_count
+            opened_count: Sendly's current opened_count
+            clicked_count: Sendly's current clicked_count
+            synced_at: When this successful poll pass completed
+        """
+        self.db.query(Campaign).filter(Campaign.id == campaign_id).update(
+            {
+                Campaign.delivered_count: delivered_count,
+                Campaign.bounced_count: bounced_count,
+                Campaign.complained_count: complained_count,
+                Campaign.opened_count: opened_count,
+                Campaign.clicked_count: clicked_count,
+                Campaign.engagement_last_synced_at: synced_at,
+            },
+            synchronize_session=False,
+        )
 
     def mark_failed(self, campaign_id: UUID) -> Optional[Campaign]:
         """

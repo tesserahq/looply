@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
@@ -17,6 +18,12 @@ class CampaignRecipient(BaseModel):
 
     contact: ContactDetails
     """The contact that was sent to, as it currently stands (not a send-time snapshot)."""
+
+    opened_at: Optional[datetime] = None
+    """Earliest known open, if any, as of the campaign's last engagement sync."""
+
+    clicked_at: Optional[datetime] = None
+    """Earliest known click, if any, as of the campaign's last engagement sync."""
 
     created_at: datetime
     """When this recipient was recorded (i.e. when the campaign was sent)."""

@@ -15,8 +15,14 @@ The first version supports an immediate, one-time send to one Looply contact lis
 | Resolving eligible contacts at send time | Suppression and unsubscribe checks |
 | Calling Sendly through `tessera-sdk` | Broadcast queueing and delivery |
 | The returned Sendly batch ID | Per-recipient delivery records and events |
+| A bounded-window cache of first-open/first-click timestamps and result counts | Sendly's full delivery-event history |
 
-Looply must not create its own email HTML, delivery jobs, delivery-event table, or duplicate delivery metrics. Sendly is the source of truth for those concerns.
+Looply must not create its own email HTML or delivery jobs, and must not duplicate Sendly's full
+delivery-event history. The one deliberate, scoped exception is the narrow engagement cache
+described in "Engagement cache" below: first-occurrence `opened_at`/`clicked_at` timestamps and
+campaign-level result counts, refreshed for a bounded window after a campaign completes. Sendly
+remains the source of truth for everything beyond that — per-event history, multiple
+opens/clicks, bounces, complaints, and anything after the polling window closes.
 
 ## Campaign data
 
@@ -35,6 +41,9 @@ Looply must not create its own email HTML, delivery jobs, delivery-event table, 
 | `batch_id` | Batch ID returned after the broadcast is accepted |
 | `sent_at` | When Sendly accepted the broadcast |
 | `completed_at` | When Sendly reports the send stage finished |
+| `delivered_count`, `bounced_count`, `complained_count`, `opened_count`, `clicked_count` | Result counts, refreshed from Sendly while inside the engagement polling window |
+| `engagement_last_synced_at` | When engagement data was last *fully* refreshed from Sendly; `None` if no successful refresh has happened yet |
+| `engagement_polling_expires_at` | When Looply stops refreshing this campaign's engagement data (`completed_at` + the global polling window) |
 
 The template belongs to Sendly and remains live until the campaign is sent. Its layout is therefore also a Sendly concern; Looply stores neither a layout ID nor email HTML.
 
@@ -104,6 +113,9 @@ request = SendBroadcastRequest(
                 "job_title": contact.job_title,
                 "contact_type": contact.contact_type,
             },
+            # Lets later engagement polling match Sendly's results back to
+            # this contact without relying on the mutable email address.
+            client_reference_id=contact.id,
         )
         for contact in recipients
     ],
@@ -128,11 +140,40 @@ For recipient-level outcomes or later reporting, query Sendly by `batch_id` (or 
 ## Recipient snapshot
 
 `CampaignRecipient` records which contacts a campaign was actually sent to, since the
-`contact_list_id` it points to can gain or lose members afterward. It stores only
-`campaign_id` and `contact_id` — a live reference, not a copy of the contact's email/name at
+`contact_list_id` it points to can gain or lose members afterward. It stores
+`campaign_id`, `contact_id` — a live reference, not a copy of the contact's email/name at
 send time — and is written once, in the same transaction as the `sending` status update, right
-after Sendly accepts the broadcast. It is not a delivery-event table: it has no per-recipient
-status, and delivery outcomes are still exclusively Sendly's concern (see above).
+after Sendly accepts the broadcast. It also carries the engagement cache described below.
+
+## Engagement cache
+
+Looply caches a narrow, first-occurrence slice of Sendly's engagement data so a campaign's
+results can be shown inside Looply without a live call to Sendly. This is a deliberate, scoped
+exception to "Looply must not duplicate Sendly's delivery-event history" above — see "Scope"
+for exactly what is and isn't covered.
+
+- **What's cached**: `CampaignRecipient.opened_at`/`clicked_at` (first-occurrence only, not a
+  per-event log) and `Campaign.delivered_count`/`bounced_count`/`complained_count`/
+  `opened_count`/`clicked_count`.
+- **How it's refreshed**: `poll_campaign_engagement`, a Celery beat task, runs for every
+  `completed` campaign still inside its polling window. For each one, it walks every page of
+  `SendlyClient.iter_broadcast_recipients(batch_id=...)`, matches each result back to a
+  `CampaignRecipient` by `contact_id` (sent to Sendly as `client_reference_id` — never by email,
+  since email is mutable), and fills in `opened_at`/`clicked_at`. It also calls
+  `get_broadcast()` to refresh the campaign's result counts. A failed lookup for one campaign is
+  logged and skipped — matching `poll_campaign_status` — so it never stops the rest of the batch,
+  and never advances that campaign's `engagement_last_synced_at`.
+- **Bounded window**: `engagement_polling_expires_at` is fixed at `completed_at` plus a global
+  default (`Settings.engagement_polling_window_days`, default 3 days) the moment a campaign is
+  marked `completed`. Once passed, that campaign is never polled again — a contact who opens on
+  day 5 of a 3-day window still shows as a non-opener in Looply indefinitely. There's no
+  per-campaign override.
+- **Freshness**: `engagement_last_synced_at` only advances after a fully successful poll pass for
+  that campaign, so it's a trustworthy "data as of" timestamp even though per-item polling
+  failures are swallowed — build any "data as of" UI off this field, not `completed_at` or
+  `engagement_polling_expires_at`.
+- **Not covered**: multiple opens/clicks per recipient, timestamps for bounces/complaints, or any
+  Sendly delivery-event data beyond the fields above. For that, query Sendly directly.
 
 ## Safe retries
 

@@ -134,11 +134,19 @@ whether segments end up list-scoped or not.
   the existing campaign read schema/endpoint (`app/schemas/campaign.py`,
   `app/routers/campaign.py`) — no new endpoints.
 
-### Phase 2 — `Segment` model, rule engine (list membership + campaign-activity conditions)
+### Phase 2 — `Segment` model, rule engine, and campaign send-time wiring (list membership + campaign-activity conditions)
 
 Ships the ability to build and save a list-agnostic segment based on list membership and
-prior-campaign engagement (user stories 3–4, 6–8), the narrowest version of the feature that
-solves the original problem without hard-coding a list scope.
+prior-campaign engagement, **and** wires it end-to-end into campaign sending (user stories 3–4,
+6–11), so the original problem ("exclude prior openers") is fully solvable by the end of this
+phase — not just modeled. `contact_field` conditions are deliberately deferred to Phase 3; every
+other piece needed to build a segment, attach it to a campaign, and send to it ships here.
+
+This absorbs what an earlier version of this PRD placed in Phase 3: the `Campaign.contact_list_id`
+→ `Campaign.segment_id` schema cutover and the send-flow's switch to segment resolution. That move
+was made deliberately, per design review — see "Known Risks" (now resolved) for why leaving segment
+resolution to Phase 3 while Phase 2 claimed to already solve the user problem was a real
+contradiction, not just a wording issue.
 
 - **New model** `Segment` (new file, e.g. `app/models/segment.py`), following existing model
   conventions (`TimestampMixin`, `SoftDeleteMixin`, UUID PK, `created_by_id` FK to `users`):
@@ -247,6 +255,25 @@ solves the original problem without hard-coding a list scope.
     `apply_filters`'s permissive fallback — `ContactFieldOp` restricted to `==`/`!=`/`ilike`/`in`,
     `ContactFieldName` restricted to the named `Contact` columns, string values capped at
     `MAX_STRING_LENGTH`, `in` lists capped at `MAX_IN_VALUES`.
+  - **`campaign_activity.campaign_id` lifecycle validation**: on segment create/update, the
+    referenced campaign must exist and have `status == completed`, or the request is rejected
+    (HTTP 422). This is re-validated at resolution time too (both preview and send), so a campaign
+    deleted or reverted after the segment was saved fails the resolve explicitly instead of
+    silently widening the audience (a referenced-but-gone campaign would otherwise match zero
+    `CampaignRecipient` rows, making every contact satisfy `has_not`).
+  - **`CampaignActivityOp.HAS_NOT` semantics**: defined as "was sent this campaign and did not
+    open/click it" — requires an *existing* `CampaignRecipient` row for the given `campaign_id`
+    with the relevant timestamp column null. A contact who was never sent that campaign at all (no
+    matching row) does **not** satisfy `has_not`:
+    ```sql
+    -- has_not(campaign_id, event) resolves to:
+    EXISTS (
+      SELECT 1 FROM campaign_recipient
+      WHERE contact_id = contact.id
+        AND campaign_id = :campaign_id
+        AND {event}_at IS NULL
+    )
+    ```
 
   **Example rule trees** (shown as the `Segment.rule` JSON a validated `SegmentRuleCreate` would
   serialize to — enum members serialize to their string `.value`, e.g. `ListMembershipOp.IN` →
@@ -338,13 +365,24 @@ solves the original problem without hard-coding a list scope.
   still being built/edited, before it's saved. Both routes reuse the same resolver code path as
   segment-to-contact-set resolution at send time, so the preview count and the actual send audience
   can never drift apart from independently-maintained logic.
-- Campaign wiring (attaching a segment to a campaign, and using it at send time) is explicitly
-  **not** part of Phase 2 — this phase only makes segments buildable, saveable, and resolvable to a
-  contact set on their own.
+- **Schema change**: replace `Campaign.contact_list_id` (currently required) with
+  `Campaign.segment_id: UUID` (FK to `segments.id`, **required**). A campaign's audience is always
+  "resolve this segment" — there's no longer a separate list step. This ships as a clean breaking
+  schema change: no existing campaigns need to be migrated/backfilled, since there is no production
+  data to preserve — existing campaign rows are dropped, not carried forward.
+- **Send-flow change**: in `SendCampaignCommand` / the eligibility-filtering repository method
+  (formerly `ContactListRepository.get_eligible_campaign_recipients`, now driven by segment rather
+  than list), the segment's resolved contact set (this phase's resolver) is intersected with
+  today's existing eligibility filter (active, has email, deduplicated by email) — the segment
+  defines the target audience; the eligibility filter still applies on top of it, unchanged in its
+  own logic.
+- Phase 3 only adds `contact_field` conditions on top of this; it does not need its own schema
+  cutover or send-flow change — both ship here, in Phase 2.
 
-### Phase 3 — Contact-field conditions + campaign send-time wiring
+### Phase 3 — Contact-field conditions
 
-Completes the feature end-to-end (user stories 5, 9–11).
+Completes the general filter engine (user story 5), purely additive on top of Phase 2's
+already-usable segment→campaign flow.
 
 - **Rule tree extension**: add a third leaf condition type, `contact_field`, following the same
   named-constant rule as Phase 2's leaves (no bare string literals for field names or operators):
@@ -377,16 +415,6 @@ Completes the feature end-to-end (user stories 5, 9–11).
   comparison logic once `operator` has already been validated against `ContactFieldOp`, never pass
   a raw unvalidated string into it. `Leaf` becomes
   `Union[ListMembershipCondition, CampaignActivityCondition, ContactFieldCondition]`.
-- **Schema change**: replace `Campaign.contact_list_id` (currently required) with
-  `Campaign.segment_id: UUID` (FK to `segments.id`, **required**). A campaign's audience is always
-  "resolve this segment" — there's no longer a separate list step. No existing campaigns need to be
-  migrated/backfilled; this ships as a clean breaking schema change (existing campaign rows are
-  dropped, not carried forward).
-- **Send-flow change**: in `SendCampaignCommand` / the eligibility-filtering repository method
-  (formerly `ContactListRepository.get_eligible_campaign_recipients`, now driven by segment rather
-  than list), the segment's resolved contact set (Phase 2's resolver) is intersected with today's
-  existing eligibility filter (active, has email, deduplicated by email) — the segment defines the
-  target audience; the eligibility filter still applies on top of it, unchanged in its own logic.
 - **Segment-picker UX note** (backend-relevant only insofar as it shapes the API): for the common
   "just send to this whole list" case, the campaign-creation flow can offer a "pick a list"
   shortcut that transparently creates (or reuses) a trivial one-condition segment
@@ -427,14 +455,19 @@ and the Celery task's DB effects, not mocked-out internals).
   - A resolver test asserting the "resolve count" path and the "resolve contacts" path agree
     (`count == len(resolved_contacts)`) across the same range of rule trees used elsewhere in
     Phase 2's resolver tests, so the two code paths can't silently drift.
-- **Phase 3**:
-  - Resolver tests extended to cover `contact_field` conditions and mixed AND/OR trees combining
-    all three condition types.
+  - Lifecycle-validation tests: creating/updating a segment with a `campaign_activity.campaign_id`
+    that doesn't exist or isn't `completed` is rejected (422); a segment that resolved fine at save
+    time fails explicitly at resolution if the referenced campaign is later deleted/un-completed.
+  - `has_not` semantics test: a contact never sent the referenced campaign does not satisfy
+    `has_not`, distinguishing "sent and didn't open" from "never sent."
   - `SendCampaignCommand` test asserting a campaign sends only to the intersection of
     segment-resolved contacts and today's existing eligibility filter — extending
     `tests/app/commands/test_send_campaign_command.py`.
   - A test that a campaign's `segment_id` is required (schema/DB level) and that a segment with no
     `list_membership` condition resolves and sends correctly across contacts from multiple lists.
+- **Phase 3**:
+  - Resolver tests extended to cover `contact_field` conditions and mixed AND/OR trees combining
+    all three condition types.
 
 Ask the user which of these modules they want tests written for before implementation begins on
 each phase — this PRD identifies the segment resolver (Phase 2) as the highest-value module to get
@@ -463,7 +496,7 @@ right, since every later phase and the send flow itself depends on its correctne
   recipient with timestamps) — the cache is deliberately restricted to first-occurrence
   `opened_at`/`clicked_at`.
 - Migrating/backfilling existing `Campaign.contact_list_id` data — there is no production data to
-  preserve; Phase 3 ships `segment_id` as a required column with existing campaign rows dropped,
+  preserve; Phase 2 ships `segment_id` as a required column with existing campaign rows dropped,
   not converted.
 
 ## Known Risks (from design review)
@@ -526,40 +559,41 @@ and `tessera-sdk-py` (both under `~/sites/linden-family/`) as of 2026-08-29.
   `Leaf` union with its own bounded field/operator/value-type allow-list, not left to
   `apply_filters`'s defaults.
 
-- **[OPEN] `campaign_activity` references lack lifecycle validation.** Nothing requires a
-  `campaign_activity.campaign_id` to reference a campaign that actually exists or has completed.
-  A segment referencing a draft, deleted, or never-existent campaign resolves every contact as
+- **[RESOLVED] `campaign_activity` references lack lifecycle validation.** Nothing required a
+  `campaign_activity.campaign_id` to reference a campaign that actually exists or has completed —
+  a segment referencing a draft, deleted, or never-existent campaign would resolve every contact as
   `has_not` opened/clicked it (no matching `CampaignRecipient` rows exist), silently producing a
-  much broader audience than intended instead of failing explicitly. **Action required** (Phase 2):
-  on segment create/update, require every referenced `campaign_activity.campaign_id` to exist and
-  be `completed`; revalidate this at resolution time too, so a campaign deleted after the segment
-  was saved fails explicitly rather than silently widening the audience.
+  much broader audience than intended. Resolved by decision: on segment create/update, every
+  referenced `campaign_activity.campaign_id` must exist and be `completed` (422 otherwise); the
+  same check is re-run at resolution time (preview and send), so a campaign deleted after the
+  segment was saved fails explicitly rather than silently widening the audience. See Phase 2's rule
+  tree section for the implementation.
 
-- **[OPEN] `has_not` has no defined set semantics.** It's unspecified whether a contact who was
-  never sent the referenced campaign at all (no `CampaignRecipient` row) counts as "has not
-  opened" it. An inner-join implementation and a `NOT EXISTS` implementation are both consistent
-  with the current wording but produce different audiences. **Action required** (Phase 2): define
-  `has_not` explicitly as requiring an *existing* `CampaignRecipient` row for the referenced
-  campaign with the relevant timestamp column null — i.e., "was sent it and didn't open/click it,"
-  not "wasn't sent it." Contacts never sent that campaign should not qualify as `has_not`.
+- **[RESOLVED] `has_not` had no defined set semantics.** It was unspecified whether a contact who
+  was never sent the referenced campaign at all (no `CampaignRecipient` row) counts as "has not
+  opened" it. Resolved by decision: `has_not` requires an *existing* `CampaignRecipient` row for
+  the referenced campaign with the relevant timestamp column null — i.e., "was sent it and didn't
+  open/click it," not "wasn't sent it." Contacts never sent that campaign do not qualify as
+  `has_not`. See Phase 2's rule tree section for the SQL definition.
 
-- **[OPEN] The "data as of" indicator has no trustworthy timestamp to point at.** The schema adds
-  engagement values but no successful-sync timestamp, and polling deliberately swallows per-item
-  failures (matching the existing `poll_campaign_status` pattern). If refreshes fail silently for
-  days, the UI has nothing but `completed_at` or the polling-window end to infer freshness from,
-  and would present stale data as current. **Action required** (Phase 1): add
-  `engagement_last_synced_at` (updated only after a fully successful refresh) and a fixed
-  `engagement_polling_expires_at` to `Campaign`, and expose both through the API so the results UI
-  can build an honest "data as of" indicator.
+- **[RESOLVED] The "data as of" indicator had no trustworthy timestamp to point at.** The schema
+  added engagement values but no successful-sync timestamp, and polling deliberately swallows
+  per-item failures (matching the existing `poll_campaign_status` pattern) — if refreshes failed
+  silently for days, the UI had nothing but `completed_at` or the polling-window end to infer
+  freshness from, and would present stale data as current. Resolved by decision: Phase 1 adds
+  `engagement_last_synced_at` (updated only after a fully successful refresh pass — left untouched
+  on a partial failure) and a fixed `engagement_polling_expires_at` to `Campaign`, both exposed
+  through the API so the results UI can build an honest "data as of" indicator.
 
-- **[OPEN] Claimed phase value contradicts the phase boundaries.** Further Notes below claims
-  "Phase 2 alone already solves the original 'exclude prior openers' problem," but Phase 2
-  explicitly excludes attaching/applying a segment to a campaign — that's Phase 3. As written,
-  after Phases 1 and 2 ship, a user still cannot actually send a follow-up campaign restricted to
-  a segment. **Action required**: either move `segment_id` and send-time segment resolution into
-  Phase 2 (so `list_membership`/`campaign_activity` segments are usable end-to-end before
-  `contact_field` conditions exist, with `contact_field` becoming the sole Phase 3 addition), or
-  stop describing Phase 2 as independently solving the user-facing problem.
+- **[RESOLVED] Claimed phase value contradicted the phase boundaries.** Further Notes below claimed
+  "Phase 2 alone already solves the original 'exclude prior openers' problem," but Phase 2 as
+  originally scoped excluded attaching/applying a segment to a campaign — that was Phase 3. As
+  written, after Phases 1 and 2 shipped, a user still could not actually send a follow-up campaign
+  restricted to a segment. Resolved by decision: `Campaign.segment_id`, its breaking schema
+  cutover, and send-time segment resolution moved into Phase 2 — `list_membership`/
+  `campaign_activity` segments are now usable end-to-end (build → attach to campaign → send) before
+  `contact_field` conditions exist. Phase 3 is now purely additive (`contact_field` only). See
+  Phase 2 and Phase 3 above for the updated scope.
 
 ## Further Notes
 
@@ -582,7 +616,9 @@ and `tessera-sdk-py` (both under `~/sites/linden-family/`) as of 2026-08-29.
   rather than after a campaign is already sent.
 - The phase boundaries are chosen so each is independently valuable: Phase 1 alone already answers
   "did my campaign work" inside Looply; Phase 2 alone already solves the original "exclude prior
-  openers" problem (and subsumes "target a specific list," via `list_membership`) even before
-  contact-field conditions exist; Phase 3 completes the general filter engine and wires it into
-  campaign sending. Phases can be re-sequenced or split further if needed, but this ordering was
-  chosen to ship the original problem's solution (Phase 2) as early as possible.
+  openers" problem end-to-end — segment build, campaign attachment, and send all ship together in
+  this phase (and it subsumes "target a specific list," via `list_membership`) — even before
+  contact-field conditions exist; Phase 3 completes the general filter engine with `contact_field`
+  conditions, purely additive on top of Phase 2's already-usable segment→campaign flow. Phases can
+  be re-sequenced or split further if needed, but this ordering ships the original problem's full
+  solution (Phase 2) as early as possible.

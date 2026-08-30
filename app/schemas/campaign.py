@@ -123,6 +123,30 @@ class CampaignInDB(CampaignBase):
     completed_at: Optional[datetime] = None
     """When Sendly reported the send stage finished."""
 
+    delivered_count: int = 0
+    """Number of recipients Sendly has ever reported as delivered."""
+
+    bounced_count: int = 0
+    """Number of recipients Sendly has ever reported as bounced."""
+
+    complained_count: int = 0
+    """Number of recipients Sendly has ever reported as complained."""
+
+    opened_count: int = 0
+    """Number of recipients Sendly has ever reported a first open for."""
+
+    clicked_count: int = 0
+    """Number of recipients Sendly has ever reported a first click for."""
+
+    engagement_last_synced_at: Optional[datetime] = None
+    """When engagement data was last fully refreshed from Sendly. None if no
+    successful refresh has happened yet - use this, not completed_at or
+    engagement_polling_expires_at, to build a "data as of" indicator."""
+
+    engagement_polling_expires_at: Optional[datetime] = None
+    """When Looply stops refreshing this campaign's engagement data. Opens
+    or clicks recorded by Sendly after this point are never reflected here."""
+
     created_at: datetime
     """Timestamp when the campaign record was created."""
 

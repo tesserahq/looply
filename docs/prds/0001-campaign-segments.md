@@ -247,6 +247,79 @@ solves the original problem without hard-coding a list scope.
     `apply_filters`'s permissive fallback — `ContactFieldOp` restricted to `==`/`!=`/`ilike`/`in`,
     `ContactFieldName` restricted to the named `Contact` columns, string values capped at
     `MAX_STRING_LENGTH`, `in` lists capped at `MAX_IN_VALUES`.
+
+  **Example rule trees** (shown as the `Segment.rule` JSON a validated `SegmentRuleCreate` would
+  serialize to — enum members serialize to their string `.value`, e.g. `ListMembershipOp.IN` →
+  `"in"`):
+
+  - The PRD's original motivating case — "the other 15 of 20 who didn't open last month's
+    campaign" — is a single leaf, no group needed:
+    ```json
+    {
+      "root": {
+        "type": "campaign_activity",
+        "campaign_id": "3fa2...c9d1",
+        "event": "opened",
+        "op": "has_not"
+      }
+    }
+    ```
+  - "Everyone in the Newsletter list" — the trivial one-condition segment the campaign-builder's
+    "pick a list" shortcut (Phase 3) creates behind the scenes:
+    ```json
+    {
+      "root": {
+        "type": "list_membership",
+        "list_id": "9c11...44ab",
+        "op": "in"
+      }
+    }
+    ```
+  - "In the Newsletter list AND clicked the Spring Sale campaign" — a two-leaf AND group, user
+    story 4's reward/upsell case:
+    ```json
+    {
+      "root": {
+        "op": "and",
+        "conditions": [
+          {"type": "list_membership", "list_id": "9c11...44ab", "op": "in"},
+          {"type": "campaign_activity", "campaign_id": "7ab0...12ef", "event": "clicked", "op": "has"}
+        ]
+      }
+    }
+    ```
+  - "In list A OR in list B, but not the Newsletter list" — nested groups (an OR group nested
+    inside an AND group; depth 2 of the allowed 5), exercising both group types together:
+    ```json
+    {
+      "root": {
+        "op": "and",
+        "conditions": [
+          {
+            "op": "or",
+            "conditions": [
+              {"type": "list_membership", "list_id": "list-a-id", "op": "in"},
+              {"type": "list_membership", "list_id": "list-b-id", "op": "in"}
+            ]
+          },
+          {"type": "list_membership", "list_id": "newsletter-id", "op": "not_in"}
+        ]
+      }
+    }
+    ```
+  - Phase 3 addition — "Company X AND did not open Campaign A" (user story 6's example),
+    combining a `contact_field` leaf with a `campaign_activity` leaf:
+    ```json
+    {
+      "root": {
+        "op": "and",
+        "conditions": [
+          {"type": "contact_field", "field": "company", "operator": "==", "value": "Acme Inc"},
+          {"type": "campaign_activity", "campaign_id": "3fa2...c9d1", "event": "opened", "op": "has_not"}
+        ]
+      }
+    }
+    ```
 - **Segment repository/resolver**: a new deep module responsible for compiling a rule tree into a
   SQLAlchemy filter/query against `Contact`/`ContactListMember`/`CampaignRecipient`, and returning
   the resolved contact set for a given segment. This is the piece most worth isolating and testing

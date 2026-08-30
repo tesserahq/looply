@@ -7,10 +7,10 @@ from app.constants.campaign import CampaignStatus
 from app.repositories.contact_list_repository import ContactListRepository
 
 
-def test_create_campaign(client_test_user: TestClient, faker, test_contact_list):
+def test_create_campaign(client_test_user: TestClient, faker, test_segment):
     payload = {
         "name": faker.catch_phrase(),
-        "contact_list_id": str(test_contact_list.id),
+        "segment_id": str(test_segment.id),
         "template_id": str(uuid4()),
     }
 
@@ -23,12 +23,12 @@ def test_create_campaign(client_test_user: TestClient, faker, test_contact_list)
     assert data["id"] is not None
 
 
-def test_create_campaign_invalid_contact_list_returns_404(
+def test_create_campaign_invalid_segment_returns_404(
     client_test_user: TestClient, faker
 ):
     payload = {
         "name": faker.catch_phrase(),
-        "contact_list_id": str(uuid4()),
+        "segment_id": str(uuid4()),
     }
 
     response = client_test_user.post("/campaigns", json=payload)

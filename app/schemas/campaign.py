@@ -13,8 +13,8 @@ class CampaignBase(BaseModel):
     name: str
     """Internal name of the campaign. Required field."""
 
-    contact_list_id: UUID
-    """The Looply contact list this campaign sends to."""
+    segment_id: UUID
+    """The segment defining this campaign's audience."""
 
     project_id: Optional[UUID] = None
     """The Sendly project that owns the template and broadcast. Optional."""
@@ -50,8 +50,8 @@ class CampaignCreateRequest(BaseModel):
     name: str
     """Internal name of the campaign. Required field."""
 
-    contact_list_id: UUID
-    """The Looply contact list this campaign sends to."""
+    segment_id: UUID
+    """The segment defining this campaign's audience."""
 
     project_id: Optional[UUID] = None
     """The Sendly project that owns the template and broadcast. Optional."""
@@ -83,8 +83,8 @@ class CampaignUpdate(BaseModel):
     name: Optional[str] = None
     """Updated name."""
 
-    contact_list_id: Optional[UUID] = None
-    """Updated contact list."""
+    segment_id: Optional[UUID] = None
+    """Updated segment."""
 
     project_id: Optional[UUID] = None
     """Updated Sendly project reference."""

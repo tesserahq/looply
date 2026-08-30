@@ -17,6 +17,7 @@ from .routers import (
     waiting_list,
     stats,
     campaign,
+    segment,
 )
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from app.telemetry import setup_tracing
@@ -99,6 +100,7 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
     app.include_router(waiting_list.router)
     app.include_router(stats.router)
     app.include_router(campaign.router)
+    app.include_router(segment.router)
 
     app.include_router(get_livez_readyz_router())
 

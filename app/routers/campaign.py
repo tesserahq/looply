@@ -15,7 +15,7 @@ from app.schemas.campaign import (
 )
 from app.schemas.campaign_recipient import CampaignRecipient as CampaignRecipientSchema
 from app.repositories.campaign_repository import CampaignRepository
-from app.repositories.contact_list_repository import ContactListRepository
+from app.repositories.segment_repository import SegmentRepository
 from app.routers.utils.dependencies import get_campaign_by_id
 from app.schemas.user import User
 from tessera_sdk.server.dependencies.auth import get_current_user
@@ -40,9 +40,9 @@ def create_campaign(
     _authorized: bool = Depends(rbac["create"]),
 ):
     """Create a new draft campaign."""
-    if not ContactListRepository(db).get_contact_list(campaign_data.contact_list_id):
+    if not SegmentRepository(db).get_segment(campaign_data.segment_id):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Contact list not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found"
         )
 
     campaign = CampaignCreate(
@@ -129,7 +129,7 @@ def send_campaign(
     # as update rather than introducing a separate RBAC action for it.
     _authorized: bool = Depends(rbac["update"]),
 ):
-    """Send a draft campaign to its contact list via Sendly."""
+    """Send a draft campaign to its segment's resolved audience via Sendly."""
     try:
         command = SendCampaignCommand(db)
         sent_campaign = command.execute(campaign.id)

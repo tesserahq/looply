@@ -95,7 +95,7 @@ def test_poll_continues_after_one_campaign_errors(
     draft_campaign,
     faker,
     test_user,
-    test_contact_list,
+    test_segment,
     monkeypatch,
 ):
     from app.models.campaign import Campaign
@@ -103,7 +103,7 @@ def test_poll_continues_after_one_campaign_errors(
     other_sending = Campaign(
         name=faker.catch_phrase(),
         status=CampaignStatus.SENDING.value,
-        contact_list_id=test_contact_list.id,
+        segment_id=test_segment.id,
         batch_id=faker.uuid4(),
         created_by_id=test_user.id,
     )

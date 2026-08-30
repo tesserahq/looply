@@ -11,7 +11,7 @@ from app.db import Base
 
 class Campaign(Base, TimestampMixin, SoftDeleteMixin):
     """Campaign model for the application.
-    Represents a one-time send of a Looply contact list through Sendly.
+    Represents a one-time send of a Looply segment's audience through Sendly.
     See docs/campaign.md for the full domain spec.
     """
 
@@ -22,8 +22,12 @@ class Campaign(Base, TimestampMixin, SoftDeleteMixin):
     status: Mapped[str] = mapped_column(
         String, nullable=False, default=CampaignStatus.DRAFT.value, index=True
     )
-    contact_list_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("contact_lists.id"), nullable=False
+    # A campaign's audience is always "resolve this segment" - there's no
+    # separate list step. The common "send to this whole list" case is just
+    # a segment with a single list_membership condition (see
+    # docs/prds/0001-campaign-segments.md).
+    segment_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("segments.id"), nullable=False
     )
     # project_id and template_id reference Sendly's own domain, not local tables,
     # so they are plain columns rather than foreign keys. Both are nullable so a

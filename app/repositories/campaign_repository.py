@@ -7,8 +7,11 @@ from app.config import get_settings
 from app.models.campaign import Campaign
 from app.models.campaign_recipient import CampaignRecipient
 from app.models.contact import Contact
+from app.models.segment import Segment
 from app.constants.campaign import CampaignStatus
 from app.schemas.campaign import CampaignCreate, CampaignUpdate
+from app.schemas.segment_rule import SegmentRuleCreate
+from app.repositories.segment_resolver import resolve_contacts_query
 from app.repositories.soft_delete_repository import SoftDeleteRepository
 from app.utils.db.filtering import apply_filters
 
@@ -148,6 +151,42 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
         query = self.db.query(Campaign)
         query = apply_filters(query, Campaign, filters)
         return query.all()
+
+    def get_eligible_recipients_for_segment(self, segment: Segment) -> List[Contact]:
+        """
+        Contacts eligible to receive a campaign send for the given segment:
+        the segment's resolved contact set intersected with today's
+        eligibility filter (active, with an email address, deduplicated by
+        email). The segment defines the target audience; this filter still
+        applies on top of it, unchanged from the pre-segment contact-list
+        eligibility check.
+
+        Uses DISTINCT ON rather than Python-side dedup so large audiences
+        don't need to be loaded into memory just to remove duplicate emails.
+        Ties (same email, multiple contacts) are broken deterministically by
+        contact id.
+
+        Args:
+            segment: The campaign's segment
+
+        Returns:
+            List[Contact]: Deduplicated, active contacts with an email address
+
+        Raises:
+            SegmentResolutionError: a campaign_activity condition in the
+                segment's rule references a campaign that no longer exists
+                or isn't completed - see app.repositories.segment_resolver.
+        """
+        root = SegmentRuleCreate.model_validate(segment.rule).root
+        return (
+            resolve_contacts_query(self.db, root)
+            .filter(Contact.is_active.is_(True))
+            .filter(Contact.email.isnot(None))
+            .filter(Contact.email != "")
+            .distinct(Contact.email)
+            .order_by(Contact.email, Contact.id)
+            .all()
+        )
 
     def mark_sending(
         self,

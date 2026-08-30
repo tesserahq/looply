@@ -1,17 +1,19 @@
 # Campaigns
 
-A campaign lets Looply email one contact list. Looply chooses the audience and asks Sendly to deliver it.
+A campaign lets Looply email a segment's resolved audience. Looply resolves the audience and asks Sendly to deliver it.
 
 ## Scope
 
-The first version supports an immediate, one-time send to one Looply contact list. Scheduled sends, segments, saved queries, and manual recipient selection are future work.
+The first version supports an immediate, one-time send to a single segment. See
+[Segments](segments.md) for how a segment resolves to a contact set. Scheduled sends, saved
+queries, and manual recipient selection are future work.
 
 ## Responsibilities
 
 | Looply owns | Sendly owns |
 | --- | --- |
 | Campaign draft and status | Templates and layouts |
-| The selected contact list | Rendering and personalization |
+| The segment defining the audience | Rendering and personalization |
 | Resolving eligible contacts at send time | Suppression and unsubscribe checks |
 | Calling Sendly through `tessera-sdk` | Broadcast queueing and delivery |
 | The returned Sendly batch ID | Per-recipient delivery records and events |
@@ -31,7 +33,7 @@ opens/clicks, bounces, complaints, and anything after the polling window closes.
 | `id` | Looply campaign ID |
 | `name` | Internal name |
 | `status` | `draft`, `sending`, `completed`, or `failed` |
-| `contact_list_id` | The one Looply contact list to send to |
+| `segment_id` | The segment whose resolved contact set defines this campaign's audience |
 | `project_id` | Project that owns the template and broadcast |
 | `template_id` | A live template reference |
 | `template_variables` | Shared variables for the template |
@@ -51,19 +53,19 @@ The template belongs to Sendly and remains live until the campaign is sent. Its 
 
 When a user sends a draft campaign, Looply:
 
-1. Loads the campaign's contact list.
-2. Keeps active contacts with an email address and deduplicates by email.
-3. Converts each contact into a Sendly broadcast recipient.
+1. Resolves the campaign's segment to a contact set (see [Segments](segments.md)).
+2. Intersects that set with today's eligibility filter: active, with an email address, deduplicated by email.
+3. Converts each eligible contact into a Sendly broadcast recipient.
 4. Calls `SendlyClient.send_broadcast()` with the campaign's live template, variables, tags, and recipients.
-5. Stores the returned `batch_id`, changes the campaign to `sending`, and records the resolved contacts as `CampaignRecipient` rows (`campaign_id`, `contact_id`) — a snapshot of who the campaign was sent to, since contact list membership can change afterward.
+5. Stores the returned `batch_id`, changes the campaign to `sending`, and records the resolved contacts as `CampaignRecipient` rows (`campaign_id`, `contact_id`) — a snapshot of who the campaign was sent to, since the segment's resolved contact set can change afterward.
 
 Sendly then renders and sends asynchronously. It automatically excludes suppressed recipients.
 
 ```text
-Looply campaign + contact list
+Looply campaign + segment
           |
           v
-Resolve active, unique email recipients
+Resolve segment -> intersect with active/has-email/dedup eligibility
           |
           v
 tessera-sdk: SendlyClient.send_broadcast()
@@ -140,7 +142,7 @@ For recipient-level outcomes or later reporting, query Sendly by `batch_id` (or 
 ## Recipient snapshot
 
 `CampaignRecipient` records which contacts a campaign was actually sent to, since the
-`contact_list_id` it points to can gain or lose members afterward. It stores
+segment's resolved contact set can change afterward. It stores
 `campaign_id`, `contact_id` — a live reference, not a copy of the contact's email/name at
 send time — and is written once, in the same transaction as the `sending` status update, right
 after Sendly accepts the broadcast. It also carries the engagement cache described below.
@@ -182,5 +184,5 @@ Every attempt to send a campaign uses the same idempotency key: `campaign:{campa
 ## Future work
 
 - Scheduling in Looply: persist a future time and call the same Sendly broadcast flow when it is due.
-- Additional audience types: segments, saved queries, and manual selections.
+- Additional audience types: saved queries and manual selections, beyond segments.
 - A Looply reporting view backed by Sendly data, without duplicating Sendly's delivery pipeline.

@@ -4,8 +4,10 @@ from uuid import UUID
 from app.db import get_db
 from app.repositories.contact_repository import ContactRepository
 from app.repositories.campaign_repository import CampaignRepository
+from app.repositories.segment_repository import SegmentRepository
 from app.models.contact import Contact
 from app.models.campaign import Campaign
+from app.models.segment import Segment
 
 
 def get_contact_by_id(contact_id: UUID, db: Session = Depends(get_db)) -> Contact:
@@ -54,3 +56,27 @@ def get_campaign_by_id(campaign_id: UUID, db: Session = Depends(get_db)) -> Camp
             status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
         )
     return campaign
+
+
+def get_segment_by_id(segment_id: UUID, db: Session = Depends(get_db)) -> Segment:
+    """
+    Dependency to get a segment by ID.
+    Raises 404 if segment is not found.
+
+    Args:
+        segment_id: The ID of the segment to retrieve
+        db: Database session
+
+    Returns:
+        Segment: The segment instance
+
+    Raises:
+        HTTPException: 404 if segment not found
+    """
+    segment_repository = SegmentRepository(db)
+    segment = segment_repository.get_segment(segment_id)
+    if not segment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found"
+        )
+    return segment

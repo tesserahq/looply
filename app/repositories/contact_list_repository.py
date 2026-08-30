@@ -322,34 +322,6 @@ class ContactListRepository(SoftDeleteRepository[ContactList]):
             .order_by(ContactListMember.created_at.desc())
         )
 
-    def get_eligible_campaign_recipients(self, contact_list_id: UUID) -> List[Contact]:
-        """
-        Get the contacts eligible to receive a campaign send for a contact list:
-        active members with an email address, deduplicated by email.
-
-        Uses DISTINCT ON rather than Python-side dedup so large lists don't need
-        to be loaded into memory just to remove duplicate emails. Ties (same
-        email, multiple contacts) are broken deterministically by contact id.
-
-        Args:
-            contact_list_id: The ID of the contact list
-
-        Returns:
-            List[Contact]: Deduplicated, active contacts with an email address
-        """
-        return (
-            self.db.query(Contact)
-            .join(ContactListMember, Contact.id == ContactListMember.contact_id)
-            .filter(ContactListMember.contact_list_id == contact_list_id)
-            .filter(ContactListMember.deleted_at.is_(None))
-            .filter(Contact.is_active.is_(True))
-            .filter(Contact.email.isnot(None))
-            .filter(Contact.email != "")
-            .distinct(Contact.email)
-            .order_by(Contact.email, Contact.id)
-            .all()
-        )
-
     def get_contact_lists_for_contact(self, contact_id: UUID) -> List[ContactList]:
         """
         Get all contact lists that a contact belongs to.

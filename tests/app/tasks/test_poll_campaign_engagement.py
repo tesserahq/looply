@@ -14,9 +14,7 @@ from app.tasks.poll_campaign_engagement import _poll_campaign_engagement
 
 
 class FakeSendlyClient:
-    def __init__(
-        self, broadcasts=None, recipients=None, error_batch_ids=None
-    ):
+    def __init__(self, broadcasts=None, recipients=None, error_batch_ids=None):
         self.broadcasts = broadcasts or {}
         self.recipients = recipients or {}
         self.error_batch_ids = error_batch_ids or set()
@@ -101,9 +99,7 @@ def test_updates_recipient_and_campaign_from_stubbed_response(
     fake_client = FakeSendlyClient(
         broadcasts={campaign.batch_id: _broadcast_response(campaign.batch_id)},
         recipients={
-            campaign.batch_id: [
-                _recipient_result(test_contact.id, opened_at=opened_at)
-            ]
+            campaign.batch_id: [_recipient_result(test_contact.id, opened_at=opened_at)]
         },
     )
     monkeypatch.setattr(

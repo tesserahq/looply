@@ -177,7 +177,9 @@ def test_record_recipient_engagement_does_not_overwrite_existing_timestamp(
 
     first_open = datetime.now(timezone.utc) - timedelta(days=1)
     recipient = CampaignRecipient(
-        campaign_id=sending_campaign.id, contact_id=test_contact.id, opened_at=first_open
+        campaign_id=sending_campaign.id,
+        contact_id=test_contact.id,
+        opened_at=first_open,
     )
     db.add(recipient)
     db.commit()

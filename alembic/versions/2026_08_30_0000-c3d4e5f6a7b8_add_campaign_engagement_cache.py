@@ -22,9 +22,7 @@ def upgrade() -> None:
     """Upgrade schema."""
     op.add_column(
         "campaigns",
-        sa.Column(
-            "delivered_count", sa.Integer(), nullable=False, server_default="0"
-        ),
+        sa.Column("delivered_count", sa.Integer(), nullable=False, server_default="0"),
     )
     op.add_column(
         "campaigns",
@@ -32,9 +30,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "campaigns",
-        sa.Column(
-            "complained_count", sa.Integer(), nullable=False, server_default="0"
-        ),
+        sa.Column("complained_count", sa.Integer(), nullable=False, server_default="0"),
     )
     op.add_column(
         "campaigns",
@@ -45,7 +41,8 @@ def upgrade() -> None:
         sa.Column("clicked_count", sa.Integer(), nullable=False, server_default="0"),
     )
     op.add_column(
-        "campaigns", sa.Column("engagement_last_synced_at", sa.DateTime(), nullable=True)
+        "campaigns",
+        sa.Column("engagement_last_synced_at", sa.DateTime(), nullable=True),
     )
     op.add_column(
         "campaigns",
@@ -68,9 +65,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_index(
-        "ix_campaigns_engagement_polling_expires_at", table_name="campaigns"
-    )
+    op.drop_index("ix_campaigns_engagement_polling_expires_at", table_name="campaigns")
     op.drop_column("campaign_recipients", "clicked_at")
     op.drop_column("campaign_recipients", "opened_at")
     op.drop_column("campaigns", "engagement_polling_expires_at")

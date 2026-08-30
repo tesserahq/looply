@@ -24,10 +24,15 @@ def init_rollbar(**kwargs):
 
 
 @task_failure.connect
-def report_task_failure(sender=None, exception=None, traceback=None, einfo=None, **kwargs):
+def report_task_failure(
+    sender=None, exception=None, traceback=None, einfo=None, **kwargs
+):
     """Explicitly report failed Celery tasks to Rollbar."""
     if settings.is_production:
-        rollbar.report_exc_info(einfo, extra_data={"task": getattr(sender, "name", None)})
+        rollbar.report_exc_info(
+            einfo, extra_data={"task": getattr(sender, "name", None)}
+        )
+
 
 celery_app.conf.update(
     broker_url=f"redis://{settings.redis_host}:{settings.redis_port}/0",

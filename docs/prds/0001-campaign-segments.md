@@ -250,11 +250,11 @@ contradiction, not just a wording issue.
     validation `campaign_id` needs).
   - A rule tree with **zero** `list_membership` conditions is valid and resolves against the
     account's entire contact base — see "Out of Scope" for why this is intentionally unguarded.
-  - Phase 3's `contact_field` condition slots into the same `Leaf` union as a third member, with
-    its own field/operator/value-type allow-list (see Phase 3 below) rather than accepting
-    `apply_filters`'s permissive fallback — `ContactFieldOp` restricted to `==`/`!=`/`ilike`/`in`,
-    `ContactFieldName` restricted to the named `Contact` columns, string values capped at
-    `MAX_STRING_LENGTH`, `in` lists capped at `MAX_IN_VALUES`.
+  - Phase 3b's `contact_field` condition slots into the same `Leaf` union as a third member, with
+    its own field/operator/value-type allow-list (see Phase 3b below) rather than accepting
+    `apply_filters`'s permissive fallback — `ContactFieldOp` restricted per-field by
+    `ALLOWED_OPS_BY_FIELD`, `ContactFieldName` restricted to the named `Contact` columns, string
+    values capped at `MAX_STRING_LENGTH`, `in` lists capped at `MAX_IN_VALUES`.
   - **`campaign_activity.campaign_id` lifecycle validation**: on segment create/update, the
     referenced campaign must exist and have `status == completed`, or the request is rejected
     (HTTP 422). This is re-validated at resolution time too (both preview and send), so a campaign
@@ -292,7 +292,7 @@ contradiction, not just a wording issue.
     }
     ```
   - "Everyone in the Newsletter list" — the trivial one-condition segment the campaign-builder's
-    "pick a list" shortcut (Phase 3) creates behind the scenes:
+    "pick a list" shortcut (Phase 2) creates behind the scenes:
     ```json
     {
       "root": {
@@ -334,7 +334,7 @@ contradiction, not just a wording issue.
       }
     }
     ```
-  - Phase 3 addition — "Company X AND did not open Campaign A" (user story 6's example),
+  - Phase 3b addition — "Company X AND did not open Campaign A" (user story 6's example),
     combining a `contact_field` leaf with a `campaign_activity` leaf:
     ```json
     {
@@ -378,11 +378,44 @@ contradiction, not just a wording issue.
   own logic.
 - Phase 3 only adds `contact_field` conditions on top of this; it does not need its own schema
   cutover or send-flow change — both ship here, in Phase 2.
+- **Segment-picker UX note** (backend-relevant only insofar as it shapes the API): for the common
+  "just send to this whole list" case, the campaign-creation flow can offer a "pick a list"
+  shortcut that transparently creates (or reuses) a trivial one-condition segment
+  (`list_membership` only) behind the scenes, so the more general model doesn't add friction to the
+  simple case. Exact UI is out of scope for this backend-only PRD, but the API must support
+  creating a segment and referencing it from a campaign in the same flow without extra round trips
+  becoming a UX problem. (Relocated here from an earlier draft's Phase 3, where it had been left
+  behind after the `segment_id` cutover itself moved to this phase — see "Known Risks.")
 
-### Phase 3 — Contact-field conditions
+### Phase 3a — `ContactType` enum + listing endpoint
 
-Completes the general filter engine (user story 5), purely additive on top of Phase 2's
-already-usable segment→campaign flow.
+Prerequisite for Phase 3b: `contact_type` is currently a free-text `String` column
+(`app/models/contact.py`) with no allow-list anywhere, including on contact create/update
+(`app/schemas/contact.py`). The contact-creation UI already offers a fixed dropdown (Personal,
+Business, Vendor, Customer, Partner, Supplier, Lead), so this phase codifies that existing set as a
+real enum rather than inventing a new one — closing a pre-existing validation gap, not just
+supporting Phase 3b's segment condition.
+
+- **New enum** `ContactType` (e.g. `app/schemas/contact.py` or a shared constants module), values
+  matching the UI's existing set (lowercase, matching current data): `PERSONAL = "personal"`,
+  `BUSINESS = "business"`, `VENDOR = "vendor"`, `CUSTOMER = "customer"`, `PARTNER = "partner"`,
+  `SUPPLIER = "supplier"`, `LEAD = "lead"`.
+- **Schema change**: `contact_type: str` fields in `app/schemas/contact.py` (create, update, and
+  read schemas) become `contact_type: ContactType`, so invalid values are rejected (422) on
+  contact create/update, not just when building a segment. Existing test fixtures only use
+  `"personal"`/`"business"`, so this cutover doesn't break current tests.
+- **New endpoint** `GET /contacts/contact-types`, returning the fixed set as `{id, name}` pairs
+  (e.g. `{"id": "personal", "name": "Personal"}`), wrapped in the same `Page[T]`
+  (`fastapi_pagination`) structure used by other list endpoints (see `app/routers/contact.py`'s
+  `GET /contacts`), even though the underlying data is a static in-memory list rather than a
+  paginated DB query. Lets the segment-builder UI (and the contact-creation UI) drive the dropdown
+  from the API instead of hardcoding the list client-side.
+
+### Phase 3b — Contact-field conditions
+
+Completes the general filter engine (user story 5), additive on top of Phase 2's already-usable
+segment→campaign flow, depending on Phase 3a's `ContactType` enum for validating `contact_type`
+condition values.
 
 - **Rule tree extension**: add a third leaf condition type, `contact_field`, following the same
   named-constant rule as Phase 2's leaves (no bare string literals for field names or operators):
@@ -402,26 +435,45 @@ already-usable segment→campaign flow.
       ILIKE = "ilike"
       IN = "in"
 
+  # Not every operator is meaningful for every field (e.g. `ilike`/`in` on the boolean
+  # is_active column would fail at the SQL layer or produce a nonsense query). Validated in
+  # ContactFieldCondition below, not left to apply_filters' permissive fallback.
+  ALLOWED_OPS_BY_FIELD: dict[ContactFieldName, frozenset[ContactFieldOp]] = {
+      ContactFieldName.CONTACT_TYPE: frozenset(ContactFieldOp),
+      ContactFieldName.COMPANY: frozenset(ContactFieldOp),
+      ContactFieldName.CITY: frozenset(ContactFieldOp),
+      ContactFieldName.STATE: frozenset(ContactFieldOp),
+      ContactFieldName.COUNTRY: frozenset(ContactFieldOp),
+      ContactFieldName.IS_ACTIVE: frozenset({ContactFieldOp.EQ, ContactFieldOp.NEQ}),
+  }
+
   class ContactFieldCondition(BaseModel):
       type: Literal[ConditionType.CONTACT_FIELD] = ConditionType.CONTACT_FIELD
       field: ContactFieldName
       operator: ContactFieldOp
       value: str | bool | list[str]
+
+      @model_validator(mode="after")
+      def enforce_field_op_and_value_type(self) -> "ContactFieldCondition":
+          if self.operator not in ALLOWED_OPS_BY_FIELD[self.field]:
+              raise ValueError(f"operator {self.operator} not allowed for field {self.field}")
+          if self.field is ContactFieldName.IS_ACTIVE and not isinstance(self.value, bool):
+              raise ValueError("is_active requires a boolean value")
+          if self.operator is ContactFieldOp.IN and not isinstance(self.value, list):
+              raise ValueError("in requires a list value")
+          if self.field is ContactFieldName.CONTACT_TYPE:
+              values = self.value if isinstance(self.value, list) else [self.value]
+              if not all(v in set(ContactType) for v in values):
+                  raise ValueError("contact_type value must be a known ContactType")
+          return self
   ```
 
   `field` is restricted to `ContactFieldName`'s fixed allow-list of existing `Contact` columns;
-  `operator` is restricted to `ContactFieldOp`'s allow-list, a subset of what `apply_filters`
-  (`app/utils/db/filtering.py`) supports — this condition type should reuse `apply_filters`'s
-  comparison logic once `operator` has already been validated against `ContactFieldOp`, never pass
-  a raw unvalidated string into it. `Leaf` becomes
+  `operator` is restricted per-field by `ALLOWED_OPS_BY_FIELD` above, itself a subset of what
+  `apply_filters` (`app/utils/db/filtering.py`) supports — this condition type should reuse
+  `apply_filters`'s comparison logic once `operator` has already been validated, never pass a raw
+  unvalidated string into it. `Leaf` becomes
   `Union[ListMembershipCondition, CampaignActivityCondition, ContactFieldCondition]`.
-- **Segment-picker UX note** (backend-relevant only insofar as it shapes the API): for the common
-  "just send to this whole list" case, the campaign-creation flow can offer a "pick a list"
-  shortcut that transparently creates (or reuses) a trivial one-condition segment
-  (`list_membership` only) behind the scenes, so the more general model doesn't add friction to the
-  simple case. Exact UI is out of scope for this backend-only PRD, but the API must support
-  creating a segment and referencing it from a campaign in the same flow without extra round trips
-  becoming a UX problem.
 - No cross-segment/cross-list validation is needed at this point (unlike the earlier
   list-scoped design) — since a segment is never tied to a specific list, there's no "segment's
   list must match campaign's list" rule to enforce.
@@ -465,9 +517,17 @@ and the Celery task's DB effects, not mocked-out internals).
     `tests/app/commands/test_send_campaign_command.py`.
   - A test that a campaign's `segment_id` is required (schema/DB level) and that a segment with no
     `list_membership` condition resolves and sends correctly across contacts from multiple lists.
-- **Phase 3**:
+- **Phase 3a**:
+  - Schema tests: contact create/update rejects a `contact_type` value outside `ContactType`
+    (422); accepts each of the seven enum values.
+  - Router test for `GET /contacts/contact-types`: returns all seven `{id, name}` pairs in the
+    standard `Page[T]` shape.
+- **Phase 3b**:
   - Resolver tests extended to cover `contact_field` conditions and mixed AND/OR trees combining
     all three condition types.
+  - Validation tests: an operator not in `ALLOWED_OPS_BY_FIELD` for the given field (e.g. `ilike`
+    on `is_active`) is rejected (422); a `contact_type` value outside `ContactType` is rejected
+    (422); an `in` operator with a non-list value is rejected (422).
 
 Ask the user which of these modules they want tests written for before implementation begins on
 each phase — this PRD identifies the segment resolver (Phase 2) as the highest-value module to get
@@ -592,8 +652,9 @@ and `tessera-sdk-py` (both under `~/sites/linden-family/`) as of 2026-08-29.
   restricted to a segment. Resolved by decision: `Campaign.segment_id`, its breaking schema
   cutover, and send-time segment resolution moved into Phase 2 — `list_membership`/
   `campaign_activity` segments are now usable end-to-end (build → attach to campaign → send) before
-  `contact_field` conditions exist. Phase 3 is now purely additive (`contact_field` only). See
-  Phase 2 and Phase 3 above for the updated scope.
+  `contact_field` conditions exist. Phase 3 is now purely additive (`contact_field`, split into
+  Phase 3a's `ContactType` enum/endpoint prerequisite and Phase 3b's leaf condition). See Phase 2
+  and Phase 3a/3b above for the updated scope.
 
 ## Further Notes
 
@@ -618,7 +679,9 @@ and `tessera-sdk-py` (both under `~/sites/linden-family/`) as of 2026-08-29.
   "did my campaign work" inside Looply; Phase 2 alone already solves the original "exclude prior
   openers" problem end-to-end — segment build, campaign attachment, and send all ship together in
   this phase (and it subsumes "target a specific list," via `list_membership`) — even before
-  contact-field conditions exist; Phase 3 completes the general filter engine with `contact_field`
-  conditions, purely additive on top of Phase 2's already-usable segment→campaign flow. Phases can
-  be re-sequenced or split further if needed, but this ordering ships the original problem's full
+  contact-field conditions exist; Phase 3a closes a pre-existing gap (unvalidated `contact_type`)
+  by codifying the UI's existing fixed set as a `ContactType` enum and a listing endpoint; Phase 3b
+  completes the general filter engine with the `contact_field` condition, additive on top of Phase
+  2's already-usable segment→campaign flow and depending on Phase 3a's enum. Phases can be
+  re-sequenced or split further if needed, but this ordering ships the original problem's full
   solution (Phase 2) as early as possible.

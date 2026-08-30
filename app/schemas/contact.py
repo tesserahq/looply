@@ -2,6 +2,31 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
+from enum import Enum
+
+
+class ContactType(str, Enum):
+    """Fixed set of contact types, matching the contact-creation UI's dropdown."""
+
+    PERSONAL = "personal"
+    BUSINESS = "business"
+    VENDOR = "vendor"
+    CUSTOMER = "customer"
+    PARTNER = "partner"
+    SUPPLIER = "supplier"
+    LEAD = "lead"
+
+
+class ContactTypeOption(BaseModel):
+    """A single selectable contact type, for the contact-types listing endpoint."""
+
+    id: str
+    name: str
+
+
+CONTACT_TYPE_OPTIONS: list[ContactTypeOption] = [
+    ContactTypeOption(id=ct.value, name=ct.value.capitalize()) for ct in ContactType
+]
 
 
 class ContactBase(BaseModel):
@@ -25,8 +50,8 @@ class ContactBase(BaseModel):
     job: Optional[str] = None
     """Contact's job title. Optional field."""
 
-    contact_type: str
-    """Type of contact (e.g., 'personal', 'business'). Required field."""
+    contact_type: ContactType
+    """Type of contact. Required field."""
 
     phone_type: str
     """Type of phone number (e.g., 'mobile', 'work', 'home'). Required field."""
@@ -92,8 +117,8 @@ class ContactCreateRequest(BaseModel):
     job: Optional[str] = None
     """Contact's job title. Optional field."""
 
-    contact_type: str
-    """Type of contact (e.g., 'personal', 'business'). Required field."""
+    contact_type: ContactType
+    """Type of contact. Required field."""
 
     phone_type: str
     """Type of phone number (e.g., 'mobile', 'work', 'home'). Required field."""
@@ -150,7 +175,7 @@ class ContactUpdate(BaseModel):
     job: Optional[str] = None
     """Updated job title."""
 
-    contact_type: Optional[str] = None
+    contact_type: Optional[ContactType] = None
     """Updated contact type."""
 
     phone_type: Optional[str] = None
@@ -232,7 +257,7 @@ class ContactDetails(BaseModel):
     job: Optional[str] = None
     """Contact's job title."""
 
-    contact_type: str
+    contact_type: ContactType
     """Type of contact."""
 
     phone_type: str

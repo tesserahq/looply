@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.contact import Contact
 from app.models.waiting_list import WaitingList
 from app.models.waiting_list_member import WaitingListMember
-from app.schemas.contact import ContactCreateRequest
+from app.schemas.contact import ContactCreateRequest, ContactType
 from app.schemas.waiting_list import WaitingListContactInput
 from app.repositories.contact_repository import ContactRepository
 from app.repositories.waiting_list_repository import WaitingListRepository
@@ -71,7 +71,7 @@ class AddContactsByEmailToWaitingListCommand:
                     first_name=entry.first_name,
                     last_name=entry.last_name,
                     email=email,
-                    contact_type="",
+                    contact_type=ContactType.PERSONAL,
                     phone_type="",
                 )
                 contact = self.create_contact_command.execute(

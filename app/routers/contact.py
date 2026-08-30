@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 from fastapi_pagination import Page
+from fastapi_pagination import paginate as paginate_sequence
 from fastapi_pagination.ext.sqlalchemy import paginate
 
 from app.db import get_db
@@ -9,6 +10,8 @@ from app.schemas.contact import (
     Contact,
     ContactCreateRequest,
     ContactUpdate,
+    ContactTypeOption,
+    CONTACT_TYPE_OPTIONS,
 )
 from app.repositories.contact_repository import ContactRepository
 from app.repositories.contact_list_repository import ContactListRepository
@@ -110,6 +113,14 @@ def search_contacts(
 
     contact_repository = ContactRepository(db)
     return paginate(db, contact_repository.get_search_text_query(q))
+
+
+@router.get("/contact-types", response_model=Page[ContactTypeOption])
+def list_contact_types(
+    _authorized: bool = Depends(rbac["read"]),
+):
+    """List the fixed set of contact types available to assign to a contact."""
+    return paginate_sequence(CONTACT_TYPE_OPTIONS)
 
 
 @router.get("/{contact_id}", response_model=ContactWithLists)

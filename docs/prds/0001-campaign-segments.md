@@ -148,18 +148,71 @@ solves the original problem without hard-coding a list scope.
   - `created_by_id: UUID` (FK to `users.id`)
   - Deliberately **no** `contact_list_id` column. A segment has no owning list; any relationship to
     a list exists only inside its rule tree, as a `list_membership` condition.
-- **Rule tree schema** (defined precisely in this phase, not before): a nested structure of groups
-  (`{"op": "and" | "or", "conditions": [...]}`) and leaf conditions. Phase 2 supports two leaf
-  condition types:
-  - `list_membership` — `{"type": "list_membership", "list_id": UUID, "op": "in" | "not_in"}`.
-    Resolved as a join against `ContactListMember` filtered to the given `list_id`, checking
-    `deleted_at IS NULL` for `in` (or its absence for `not_in`). This is what makes "everyone in
-    list X" expressible without a segment needing a dedicated list-scope column.
-  - `campaign_activity` — `{"type": "campaign_activity", "campaign_id": UUID, "event": "opened" |
-    "clicked", "op": "has" | "has_not"}`. Resolved as a join against `CampaignRecipient` filtered
-    to the given `campaign_id`, checking whether the relevant timestamp column is set.
+- **Rule tree schema**: discriminated Pydantic models, not raw/free-form JSON — the API rejects
+  (HTTP 422) anything that doesn't parse into this shape, closing the resource-exhaustion surface
+  identified in "Known Risks" below. `Segment.rule` (JSONB) stores the validated tree's
+  `model_dump(mode="json")`.
+
+  ```python
+  MAX_TREE_DEPTH = 5       # a RuleGroup nested inside a RuleGroup counts as +1 depth
+  MAX_LEAVES = 25          # total leaf conditions anywhere in the tree
+  MAX_IN_VALUES = 100      # max items in a contact_field "in" value list (Phase 3)
+  MAX_STRING_LENGTH = 255  # max length of any string leaf value
+
+  class ListMembershipCondition(BaseModel):
+      type: Literal["list_membership"] = "list_membership"
+      list_id: UUID
+      op: Literal["in", "not_in"]
+
+  class CampaignActivityCondition(BaseModel):
+      type: Literal["campaign_activity"] = "campaign_activity"
+      campaign_id: UUID
+      event: Literal["opened", "clicked"]
+      op: Literal["has", "has_not"]
+
+  Leaf = Annotated[
+      Union[ListMembershipCondition, CampaignActivityCondition],
+      Field(discriminator="type"),
+  ]
+
+  class RuleGroup(BaseModel):
+      op: Literal["and", "or"]
+      conditions: list["RuleNode"] = Field(min_length=1, max_length=MAX_LEAVES)
+
+  RuleNode = Union[RuleGroup, Leaf]  # RuleGroup has no discriminator field of its own;
+                                     # a node is a RuleGroup if it has "op"+"conditions",
+                                     # else validated against the Leaf union by "type"
+  RuleGroup.model_rebuild()
+
+  class SegmentRuleCreate(BaseModel):
+      root: RuleNode
+
+      @model_validator(mode="after")
+      def enforce_limits(self) -> "SegmentRuleCreate":
+          depth, leaves = _measure(self.root)  # walks the tree once
+          if depth > MAX_TREE_DEPTH:
+              raise ValueError(f"rule tree exceeds max depth {MAX_TREE_DEPTH}")
+          if leaves > MAX_LEAVES:
+              raise ValueError(f"rule tree exceeds max {MAX_LEAVES} leaf conditions")
+          return self
+  ```
+
+  Phase 2 supports exactly the two leaf types above:
+  - `list_membership` — resolved as a join against `ContactListMember` filtered to the given
+    `list_id`, checking `deleted_at IS NULL` for `in` (or its absence for `not_in`). This is what
+    makes "everyone in list X" expressible without a segment needing a dedicated list-scope
+    column.
+  - `campaign_activity` — resolved as a join against `CampaignRecipient` filtered to the given
+    `campaign_id`, checking whether the relevant timestamp column is set (see "Known Risks" for
+    the `has_not` semantics this must define precisely, and the lifecycle validation
+    `campaign_id` needs).
   - A rule tree with **zero** `list_membership` conditions is valid and resolves against the
     account's entire contact base — see "Out of Scope" for why this is intentionally unguarded.
+  - Phase 3's `contact_field` condition slots into the same `Leaf` union as a third member, with
+    its own field/operator/value-type allow-list (see Phase 3 below) rather than accepting
+    `apply_filters`'s permissive fallback (`==`/`!=`/`ilike`/`in` only, restricted to the named
+    `Contact` columns, string values capped at `MAX_STRING_LENGTH`, `in` lists capped at
+    `MAX_IN_VALUES`).
 - **Segment repository/resolver**: a new deep module responsible for compiling a rule tree into a
   SQLAlchemy filter/query against `Contact`/`ContactListMember`/`CampaignRecipient`, and returning
   the resolved contact set for a given segment. This is the piece most worth isolating and testing
@@ -326,17 +379,20 @@ and `tessera-sdk-py` (both under `~/sites/linden-family/`) as of 2026-08-29.
   `client_reference_id` instead of by email — no new column needed, and the match survives a
   contact's email changing after send.
 
-- **[OPEN] Unconstrained recursive rule trees are a resource-exhaustion surface.** The rule tree
-  is currently specified as free-form recursive JSON with `Any` leaf values and open-ended
-  operators. The reused `apply_filters` utility (`app/utils/db/filtering.py`) silently ignores
-  invalid fields and coerces unknown operators into equality rather than rejecting them. A caller
-  could submit thousands of nested OR groups or huge `in` lists, producing expensive SQL or
-  recursion failures; invalid operators could also execute with surprising semantics.
-  **Action required** (Phase 2): define discriminated Pydantic schemas for the rule tree instead
-  of accepting raw JSON, and enforce explicit limits — e.g. max depth 5, max 25 leaves, bounded
-  string/list value sizes. Define an explicit field × operator × value-type matrix per condition
-  type and reject anything outside it with HTTP 422, rather than exposing `apply_filters`'s
-  permissive fallback behavior directly to segment input.
+- **[SCHEMA DEFINED, not yet implemented] Unconstrained recursive rule trees are a
+  resource-exhaustion surface.** Originally: the rule tree was specified only loosely as recursive
+  JSON with `Any` leaf values and open-ended operators — the reused `apply_filters` utility
+  (`app/utils/db/filtering.py`) silently ignores invalid fields and coerces unknown operators into
+  equality rather than rejecting them, so a caller could submit thousands of nested OR groups or
+  huge `in` lists, producing expensive SQL or recursion failures. Phase 2's "Rule tree schema"
+  above now pins this down precisely: discriminated Pydantic models (`RuleGroup`/`Leaf` union,
+  `Field(discriminator="type")`), `MAX_TREE_DEPTH = 5`, `MAX_LEAVES = 25`, `MAX_STRING_LENGTH =
+  255`, `MAX_IN_VALUES = 100`, and a depth/leaf-count validator that rejects anything over those
+  limits — no raw JSON accepted, no reliance on `apply_filters`'s permissive fallback. **Remaining
+  action**: implement this schema in Phase 2's actual code (`app/schemas/segment.py` or similar);
+  the design above is not yet code. Phase 3's `contact_field` condition must be added to the same
+  `Leaf` union with its own bounded field/operator/value-type allow-list, not left to
+  `apply_filters`'s defaults.
 
 - **[OPEN] `campaign_activity` references lack lifecycle validation.** Nothing requires a
   `campaign_activity.campaign_id` to reference a campaign that actually exists or has completed.

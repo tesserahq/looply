@@ -153,22 +153,49 @@ solves the original problem without hard-coding a list scope.
   identified in "Known Risks" below. `Segment.rule` (JSONB) stores the validated tree's
   `model_dump(mode="json")`.
 
+  Every operator, event name, and condition-type discriminator is a named constant (a `str, Enum`
+  member), never a bare string literal — both so a typo is a Python `NameError`/import failure
+  caught before a request is ever sent, not a silently-accepted-then-ignored value, and so
+  `app/utils/db/filtering.py`'s resolver code and any future condition type share one canonical
+  set of spellings instead of each call site re-typing `"not_in"` by hand.
+
   ```python
   MAX_TREE_DEPTH = 5       # a RuleGroup nested inside a RuleGroup counts as +1 depth
   MAX_LEAVES = 25          # total leaf conditions anywhere in the tree
   MAX_IN_VALUES = 100      # max items in a contact_field "in" value list (Phase 3)
   MAX_STRING_LENGTH = 255  # max length of any string leaf value
 
+  class ConditionType(str, Enum):
+      LIST_MEMBERSHIP = "list_membership"
+      CAMPAIGN_ACTIVITY = "campaign_activity"
+      CONTACT_FIELD = "contact_field"       # Phase 3
+
+  class LogicalOp(str, Enum):
+      AND = "and"
+      OR = "or"
+
+  class ListMembershipOp(str, Enum):
+      IN = "in"
+      NOT_IN = "not_in"
+
+  class CampaignActivityEvent(str, Enum):
+      OPENED = "opened"
+      CLICKED = "clicked"
+
+  class CampaignActivityOp(str, Enum):
+      HAS = "has"
+      HAS_NOT = "has_not"
+
   class ListMembershipCondition(BaseModel):
-      type: Literal["list_membership"] = "list_membership"
+      type: Literal[ConditionType.LIST_MEMBERSHIP] = ConditionType.LIST_MEMBERSHIP
       list_id: UUID
-      op: Literal["in", "not_in"]
+      op: ListMembershipOp
 
   class CampaignActivityCondition(BaseModel):
-      type: Literal["campaign_activity"] = "campaign_activity"
+      type: Literal[ConditionType.CAMPAIGN_ACTIVITY] = ConditionType.CAMPAIGN_ACTIVITY
       campaign_id: UUID
-      event: Literal["opened", "clicked"]
-      op: Literal["has", "has_not"]
+      event: CampaignActivityEvent
+      op: CampaignActivityOp
 
   Leaf = Annotated[
       Union[ListMembershipCondition, CampaignActivityCondition],
@@ -176,7 +203,7 @@ solves the original problem without hard-coding a list scope.
   ]
 
   class RuleGroup(BaseModel):
-      op: Literal["and", "or"]
+      op: LogicalOp
       conditions: list["RuleNode"] = Field(min_length=1, max_length=MAX_LEAVES)
 
   RuleNode = Union[RuleGroup, Leaf]  # RuleGroup has no discriminator field of its own;
@@ -197,22 +224,29 @@ solves the original problem without hard-coding a list scope.
           return self
   ```
 
+  Same rule applies going forward: Phase 3's `contact_field` condition must define
+  `ContactFieldName` and `ContactFieldOp` enums (mirroring the allow-lists below) rather than
+  typing `"contact_type"`/`"=="` as raw strings at each call site, and the resolver
+  (`app/repositories/segment_repository.py` or wherever it lands) must switch/match on these enum
+  members — never on the raw string values — so a new operator can't be introduced by silently
+  falling through to `apply_filters`'s permissive default.
+
   Phase 2 supports exactly the two leaf types above:
   - `list_membership` — resolved as a join against `ContactListMember` filtered to the given
-    `list_id`, checking `deleted_at IS NULL` for `in` (or its absence for `not_in`). This is what
-    makes "everyone in list X" expressible without a segment needing a dedicated list-scope
-    column.
+    `list_id`, checking `deleted_at IS NULL` for `ListMembershipOp.IN` (or its absence for
+    `ListMembershipOp.NOT_IN`). This is what makes "everyone in list X" expressible without a
+    segment needing a dedicated list-scope column.
   - `campaign_activity` — resolved as a join against `CampaignRecipient` filtered to the given
     `campaign_id`, checking whether the relevant timestamp column is set (see "Known Risks" for
-    the `has_not` semantics this must define precisely, and the lifecycle validation
-    `campaign_id` needs).
+    the `CampaignActivityOp.HAS_NOT` semantics this must define precisely, and the lifecycle
+    validation `campaign_id` needs).
   - A rule tree with **zero** `list_membership` conditions is valid and resolves against the
     account's entire contact base — see "Out of Scope" for why this is intentionally unguarded.
   - Phase 3's `contact_field` condition slots into the same `Leaf` union as a third member, with
     its own field/operator/value-type allow-list (see Phase 3 below) rather than accepting
-    `apply_filters`'s permissive fallback (`==`/`!=`/`ilike`/`in` only, restricted to the named
-    `Contact` columns, string values capped at `MAX_STRING_LENGTH`, `in` lists capped at
-    `MAX_IN_VALUES`).
+    `apply_filters`'s permissive fallback — `ContactFieldOp` restricted to `==`/`!=`/`ilike`/`in`,
+    `ContactFieldName` restricted to the named `Contact` columns, string values capped at
+    `MAX_STRING_LENGTH`, `in` lists capped at `MAX_IN_VALUES`.
 - **Segment repository/resolver**: a new deep module responsible for compiling a rule tree into a
   SQLAlchemy filter/query against `Contact`/`ContactListMember`/`CampaignRecipient`, and returning
   the resolved contact set for a given segment. This is the piece most worth isolating and testing
@@ -239,12 +273,37 @@ solves the original problem without hard-coding a list scope.
 
 Completes the feature end-to-end (user stories 5, 9–11).
 
-- **Rule tree extension**: add a third leaf condition type, `contact_field` —
-  `{"type": "contact_field", "field": str, "operator": str, "value": Any}`, restricted to a fixed
-  allow-list of existing `Contact` columns (`contact_type`, `company`, `city`, `state`, `country`,
-  `is_active`) and the operators already supported by the existing `apply_filters` utility
-  (`app/utils/db/filtering.py`) — `==`, `!=`, `ilike`, `in`, etc. This condition type should reuse
-  `apply_filters`'s operator table rather than reimplementing comparison logic.
+- **Rule tree extension**: add a third leaf condition type, `contact_field`, following the same
+  named-constant rule as Phase 2's leaves (no bare string literals for field names or operators):
+
+  ```python
+  class ContactFieldName(str, Enum):
+      CONTACT_TYPE = "contact_type"
+      COMPANY = "company"
+      CITY = "city"
+      STATE = "state"
+      COUNTRY = "country"
+      IS_ACTIVE = "is_active"
+
+  class ContactFieldOp(str, Enum):
+      EQ = "=="
+      NEQ = "!="
+      ILIKE = "ilike"
+      IN = "in"
+
+  class ContactFieldCondition(BaseModel):
+      type: Literal[ConditionType.CONTACT_FIELD] = ConditionType.CONTACT_FIELD
+      field: ContactFieldName
+      operator: ContactFieldOp
+      value: str | bool | list[str]
+  ```
+
+  `field` is restricted to `ContactFieldName`'s fixed allow-list of existing `Contact` columns;
+  `operator` is restricted to `ContactFieldOp`'s allow-list, a subset of what `apply_filters`
+  (`app/utils/db/filtering.py`) supports — this condition type should reuse `apply_filters`'s
+  comparison logic once `operator` has already been validated against `ContactFieldOp`, never pass
+  a raw unvalidated string into it. `Leaf` becomes
+  `Union[ListMembershipCondition, CampaignActivityCondition, ContactFieldCondition]`.
 - **Schema change**: replace `Campaign.contact_list_id` (currently required) with
   `Campaign.segment_id: UUID` (FK to `segments.id`, **required**). A campaign's audience is always
   "resolve this segment" — there's no longer a separate list step. No existing campaigns need to be

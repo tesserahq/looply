@@ -1,8 +1,27 @@
 from uuid import uuid4
 
+from app.models.contact import Contact
+
 
 class TestContactRouter:
     """Test class for contact router endpoints."""
+
+    def test_get_contact_with_legacy_blank_contact_type(self, client, db, test_user):
+        """A pre-existing row with contact_type="" (predating the ContactType enum) must
+        still serialize on read, not 500 — only create/update enforce the enum."""
+        contact = Contact(
+            first_name="Legacy",
+            contact_type="",
+            phone_type="",
+            created_by_id=test_user.id,
+        )
+        db.add(contact)
+        db.commit()
+        db.refresh(contact)
+
+        response = client.get(f"/contacts/{contact.id}")
+        assert response.status_code == 200
+        assert response.json()["contact_type"] == ""
 
     def test_create_contact(self, client, faker):
         """Test POST /contacts endpoint."""

@@ -50,8 +50,10 @@ class ContactBase(BaseModel):
     job: Optional[str] = None
     """Contact's job title. Optional field."""
 
-    contact_type: ContactType
-    """Type of contact. Required field."""
+    contact_type: str
+    """Type of contact. Free text at rest — some existing rows predate the ContactType enum
+    (e.g. blank), so this stays permissive for reads/internal writes. New/edited contacts are
+    still constrained to ContactType via ContactCreateRequest/ContactUpdate below."""
 
     phone_type: str
     """Type of phone number (e.g., 'mobile', 'work', 'home'). Required field."""
@@ -257,8 +259,8 @@ class ContactDetails(BaseModel):
     job: Optional[str] = None
     """Contact's job title."""
 
-    contact_type: ContactType
-    """Type of contact."""
+    contact_type: str
+    """Type of contact. Free text at rest, see ContactBase.contact_type."""
 
     phone_type: str
     """Type of phone number."""

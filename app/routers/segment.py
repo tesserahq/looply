@@ -13,7 +13,10 @@ from app.schemas.segment import (
     SegmentUpdate,
 )
 from app.schemas.segment_rule import SegmentRuleCreate
-from app.repositories.segment_repository import SegmentNameConflictError, SegmentRepository
+from app.repositories.segment_repository import (
+    SegmentNameConflictError,
+    SegmentRepository,
+)
 from app.repositories.segment_resolver import SegmentResolutionError, resolve_count
 from app.routers.utils.dependencies import get_segment_by_id
 from app.schemas.user import User
@@ -45,7 +48,9 @@ def create_segment(
     try:
         return SegmentRepository(db).create_segment(segment)
     except SegmentResolutionError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
+        )
     except SegmentNameConflictError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
@@ -79,7 +84,9 @@ def update_segment(
     try:
         return SegmentRepository(db).update_segment(existing_segment.id, segment_data)
     except SegmentResolutionError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
+        )
     except SegmentNameConflictError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
@@ -104,7 +111,9 @@ def preview_segment(
     try:
         count = SegmentRepository(db).preview_count(segment)
     except SegmentResolutionError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
+        )
     return SegmentPreviewResponse(contact_count=count)
 
 
@@ -118,5 +127,7 @@ def preview_draft_segment(
     try:
         count = resolve_count(db, rule.root)
     except SegmentResolutionError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
+        )
     return SegmentPreviewResponse(contact_count=count)

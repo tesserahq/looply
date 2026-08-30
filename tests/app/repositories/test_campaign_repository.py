@@ -203,7 +203,13 @@ def test_mark_failed(db, draft_campaign):
 
 
 def test_get_eligible_recipients_for_segment_filters_and_dedupes(
-    db, test_contact_list, test_segment, test_contact, inactive_contact, faker, test_user
+    db,
+    test_contact_list,
+    test_segment,
+    test_contact,
+    inactive_contact,
+    faker,
+    test_user,
 ):
     from app.models.contact import Contact
 

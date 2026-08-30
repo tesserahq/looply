@@ -21,7 +21,9 @@ def test_create_segment(client_test_user: TestClient, faker, test_contact_list):
     assert data["rule"]["root"]["list_id"] == str(test_contact_list.id)
 
 
-def test_create_segment_invalid_rule_tree_returns_422(client_test_user: TestClient, faker):
+def test_create_segment_invalid_rule_tree_returns_422(
+    client_test_user: TestClient, faker
+):
     payload = {
         "name": faker.catch_phrase(),
         "rule": {"root": {"type": "not_a_real_type"}},
@@ -81,7 +83,9 @@ def test_get_segment_not_found(client_test_user: TestClient):
 
 def test_update_segment(client_test_user: TestClient, test_segment, faker):
     new_name = faker.catch_phrase()
-    response = client_test_user.put(f"/segments/{test_segment.id}", json={"name": new_name})
+    response = client_test_user.put(
+        f"/segments/{test_segment.id}", json={"name": new_name}
+    )
     assert response.status_code == 200
     assert response.json()["name"] == new_name
 
@@ -104,7 +108,9 @@ def test_preview_saved_segment(
     assert response.json()["contact_count"] == 1
 
 
-def test_preview_draft_segment(client_test_user: TestClient, test_contact_list, test_contact, db):
+def test_preview_draft_segment(
+    client_test_user: TestClient, test_contact_list, test_contact, db
+):
     from app.repositories.contact_list_repository import ContactListRepository
 
     ContactListRepository(db).add_contact_to_list(test_contact_list.id, test_contact.id)
@@ -116,7 +122,9 @@ def test_preview_draft_segment(client_test_user: TestClient, test_contact_list, 
     assert response.json()["contact_count"] == 1
 
 
-def test_preview_draft_segment_dangling_campaign_returns_422(client_test_user: TestClient):
+def test_preview_draft_segment_dangling_campaign_returns_422(
+    client_test_user: TestClient,
+):
     response = client_test_user.post(
         "/segments/preview",
         json={

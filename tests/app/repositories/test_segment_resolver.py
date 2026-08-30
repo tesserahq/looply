@@ -79,7 +79,11 @@ def test_list_membership_not_in(db, faker, test_user, test_contact_list, test_co
     outside = _contact(db, faker, test_user)
 
     root = _root(
-        {"type": "list_membership", "list_id": str(test_contact_list.id), "op": "not_in"}
+        {
+            "type": "list_membership",
+            "list_id": str(test_contact_list.id),
+            "op": "not_in",
+        }
     )
     resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
 
@@ -137,7 +141,9 @@ def test_campaign_activity_has(db, faker, test_user, test_segment, test_contact)
     campaign = _completed_campaign(db, faker, test_user, test_segment)
     db.add(
         CampaignRecipient(
-            campaign_id=campaign.id, contact_id=test_contact.id, opened_at=faker.date_time()
+            campaign_id=campaign.id,
+            contact_id=test_contact.id,
+            opened_at=faker.date_time(),
         )
     )
     db.commit()
@@ -186,7 +192,9 @@ def test_campaign_activity_has_not_excludes_openers(
     campaign = _completed_campaign(db, faker, test_user, test_segment)
     db.add(
         CampaignRecipient(
-            campaign_id=campaign.id, contact_id=test_contact.id, opened_at=faker.date_time()
+            campaign_id=campaign.id,
+            contact_id=test_contact.id,
+            opened_at=faker.date_time(),
         )
     )
     db.commit()
@@ -209,7 +217,9 @@ def test_and_group(db, faker, test_user, test_contact_list, test_segment, test_c
     campaign = _completed_campaign(db, faker, test_user, test_segment)
     db.add(
         CampaignRecipient(
-            campaign_id=campaign.id, contact_id=test_contact.id, clicked_at=faker.date_time()
+            campaign_id=campaign.id,
+            contact_id=test_contact.id,
+            clicked_at=faker.date_time(),
         )
     )
     db.commit()
@@ -221,7 +231,11 @@ def test_and_group(db, faker, test_user, test_contact_list, test_segment, test_c
         {
             "op": "and",
             "conditions": [
-                {"type": "list_membership", "list_id": str(test_contact_list.id), "op": "in"},
+                {
+                    "type": "list_membership",
+                    "list_id": str(test_contact_list.id),
+                    "op": "in",
+                },
                 {
                     "type": "campaign_activity",
                     "campaign_id": str(campaign.id),
@@ -251,7 +265,11 @@ def test_or_group(db, faker, test_user, test_contact_list, test_contact):
         {
             "op": "or",
             "conditions": [
-                {"type": "list_membership", "list_id": str(test_contact_list.id), "op": "in"},
+                {
+                    "type": "list_membership",
+                    "list_id": str(test_contact_list.id),
+                    "op": "in",
+                },
                 {"type": "list_membership", "list_id": str(other_list.id), "op": "in"},
             ],
         }
@@ -272,7 +290,9 @@ def test_nested_groups(db, faker, test_user, test_contact_list, test_contact):
     db.refresh(newsletter)
 
     also_newsletter = _contact(db, faker, test_user)
-    ContactListRepository(db).add_contact_to_list(test_contact_list.id, also_newsletter.id)
+    ContactListRepository(db).add_contact_to_list(
+        test_contact_list.id, also_newsletter.id
+    )
     ContactListRepository(db).add_contact_to_list(newsletter.id, also_newsletter.id)
 
     root = _root(
@@ -289,7 +309,11 @@ def test_nested_groups(db, faker, test_user, test_contact_list, test_contact):
                         },
                     ],
                 },
-                {"type": "list_membership", "list_id": str(newsletter.id), "op": "not_in"},
+                {
+                    "type": "list_membership",
+                    "list_id": str(newsletter.id),
+                    "op": "not_in",
+                },
             ],
         }
     )

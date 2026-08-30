@@ -4,7 +4,10 @@ import pytest
 
 from app.constants.campaign import CampaignStatus
 from app.models.campaign import Campaign
-from app.repositories.segment_repository import SegmentNameConflictError, SegmentRepository
+from app.repositories.segment_repository import (
+    SegmentNameConflictError,
+    SegmentRepository,
+)
 from app.repositories.segment_resolver import SegmentResolutionError
 from app.schemas.segment import SegmentCreate, SegmentUpdate
 from app.schemas.segment_rule import SegmentRuleCreate
@@ -30,7 +33,9 @@ def test_create_segment(db, faker, test_user, test_contact_list):
     assert segment.rule["root"]["list_id"] == str(test_contact_list.id)
 
 
-def test_create_segment_duplicate_name_conflict(db, faker, test_user, test_contact_list):
+def test_create_segment_duplicate_name_conflict(
+    db, faker, test_user, test_contact_list
+):
     repository = SegmentRepository(db)
     name = faker.catch_phrase()
     repository.create_segment(
@@ -66,7 +71,9 @@ def test_create_segment_rejects_dangling_campaign_reference(db, faker, test_user
 
     with pytest.raises(SegmentResolutionError):
         repository.create_segment(
-            SegmentCreate(name=faker.catch_phrase(), rule=rule, created_by_id=test_user.id)
+            SegmentCreate(
+                name=faker.catch_phrase(), rule=rule, created_by_id=test_user.id
+            )
         )
 
 
@@ -109,7 +116,10 @@ def test_update_segment_rule(db, test_segment, test_contact_list, faker, test_us
 
 def test_update_segment_not_found(db, faker):
     repository = SegmentRepository(db)
-    assert repository.update_segment(uuid4(), SegmentUpdate(name=faker.catch_phrase())) is None
+    assert (
+        repository.update_segment(uuid4(), SegmentUpdate(name=faker.catch_phrase()))
+        is None
+    )
 
 
 def test_delete_segment(db, test_segment):

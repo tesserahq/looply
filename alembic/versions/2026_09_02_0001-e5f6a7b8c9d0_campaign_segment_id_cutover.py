@@ -34,7 +34,9 @@ def upgrade() -> None:
         "campaigns_contact_list_id_fkey", "campaigns", type_="foreignkey"
     )
     op.drop_column("campaigns", "contact_list_id")
-    op.add_column("campaigns", sa.Column("segment_id", sa.UUID(as_uuid=True), nullable=False))
+    op.add_column(
+        "campaigns", sa.Column("segment_id", sa.UUID(as_uuid=True), nullable=False)
+    )
     op.create_foreign_key(
         "campaigns_segment_id_fkey",
         "campaigns",

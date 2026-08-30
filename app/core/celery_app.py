@@ -1,10 +1,33 @@
 # pyright: reportMissingTypeStubs=false
+import logging
+
+import rollbar
 from celery import Celery
+from celery.signals import task_failure, worker_process_init
+
 from app.config import get_settings
 
 settings = get_settings()
 
 celery_app = Celery("looply-worker")
+
+
+@worker_process_init.connect
+def init_rollbar(**kwargs):
+    """Initialize Rollbar in each worker process so task errors are reported."""
+    if settings.is_production:
+        rollbar.init(settings.rollbar_access_token, environment=settings.environment)
+
+        handler = rollbar.logger.RollbarHandler()
+        handler.setLevel(logging.ERROR)
+        logging.getLogger().addHandler(handler)
+
+
+@task_failure.connect
+def report_task_failure(sender=None, exception=None, traceback=None, einfo=None, **kwargs):
+    """Explicitly report failed Celery tasks to Rollbar."""
+    if settings.is_production:
+        rollbar.report_exc_info(einfo, extra_data={"task": getattr(sender, "name", None)})
 
 celery_app.conf.update(
     broker_url=f"redis://{settings.redis_host}:{settings.redis_port}/0",

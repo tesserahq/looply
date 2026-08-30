@@ -15,12 +15,19 @@ contact attributes (company, contact type, location) isn't possible today.
 
 ## Solution
 
-Introduce **Segments**: a saved, reusable, rule-based filter scoped to one contact list, the same
-way Mailchimp scopes a Segment to one Audience. A segment narrows down a base contact list using
-conditions — initially, past campaign engagement (opened/clicked a specific prior campaign) and
-existing contact fields (company, contact type, city, state, country, active status) — combined
-with AND/OR logic. A campaign keeps its required base contact list and gains an optional segment
-that narrows it at send time.
+Introduce **Segments**: a saved, reusable, rule-based filter over Looply's contact base as a
+whole — the way Loops.so scopes a Segment to its entire Audience rather than to one sub-list. A
+segment is not owned by, or scoped to, any single contact list; instead, "is a member of list X"
+is just one filterable condition among others (company, contact type, location, prior-campaign
+engagement), combinable with AND/OR logic. A campaign's audience is defined entirely by the
+segment it references — there is no separate, required "base list" a segment narrows down.
+
+This is a deliberate reversal of an earlier version of this PRD, which scoped every segment to
+exactly one contact list (matching Mailchimp's Audience-scoped segments). That shape forced a
+rigid two-step flow — create a list, then a segment on top of it — and made a segment unusable
+outside the list it was born under. Contacts already support many-to-many list membership
+(`ContactListMember`), so there's no structural reason to also force a hard 1:1 between a segment
+and a list; list membership fits naturally as just another condition type.
 
 This requires Looply to start caching a thin slice of engagement data it deliberately doesn't
 store today: `opened_at`/`clicked_at` per recipient, and campaign-level result counts, refreshed by
@@ -29,8 +36,9 @@ reversal of the rule in `docs/campaign.md` that Looply must not duplicate Sendly
 data — that document must be updated alongside this work, not left contradicting the code.
 
 The work is split into phases so each lands as an independently shippable, coherent slice rather
-than one large change. Phase 1 depends on `tessera-sdk` changes being handled separately — see
-"Implementation Decisions."
+than one large change. Phase 1 depends on `tessera-sdk` support for the new count fields and
+per-email listing, which has already been merged and is available today — see "Implementation
+Decisions."
 
 ## User Stories
 
@@ -45,28 +53,36 @@ than one large change. Phase 1 depends on `tessera-sdk` changes being handled se
    audience.
 5. As a campaign sender, I want to filter a segment by contact fields like company, contact type,
    or location, so that I can combine engagement history with who the contact actually is.
-6. As a campaign sender, I want to combine multiple conditions with AND/OR logic, so that I can
-   express rules like "in Company X AND did not open Campaign A."
-7. As a campaign sender, I want to save a segment with a name and reuse it across multiple
-   campaigns, so that I don't have to rebuild the same filter every time I send a related
-   follow-up.
-8. As a campaign sender, I want a segment to always be scoped to one contact list, so that I never
-   accidentally attach a segment built for one audience to a campaign targeting a different one.
-9. As a campaign sender, I want a draft campaign to optionally reference a saved segment on top of
-   its required contact list, so that existing campaigns (which have no segment) keep working
-   exactly as they do today.
-10. As a campaign sender, I want the segment's conditions to be evaluated at send time (same moment
+6. As a campaign sender, I want to filter a segment by list membership (in a list, or not in a
+   list), so that "everyone in list X" is just as expressible as any other condition, without a
+   list being a required, separate concept from the segment itself.
+7. As a campaign sender, I want to combine multiple conditions — including list membership,
+   engagement, and contact fields — with AND/OR logic, so that I can express rules like "in list X
+   AND in Company Y AND did not open Campaign A."
+8. As a campaign sender, I want to save a segment with a name and reuse it across multiple
+   campaigns regardless of which lists it happens to touch, so that I don't have to rebuild the
+   same filter every time I send a related follow-up.
+9. As a campaign sender, I want a campaign's audience to be defined by a single required segment,
+   so that building a campaign is always "choose or build a segment," not two separate steps of
+   picking a list and then optionally narrowing it.
+10. As a campaign sender, when all I want is "everyone in this list," I want that to still be as
+    quick as picking a list, so that the segment model being more general doesn't make the common
+    case more work.
+11. As a campaign sender, I want the segment's conditions to be evaluated at send time (same moment
     today's active/has-email eligibility check runs), so that the audience reflects the latest
     cached engagement data available when I actually send.
-11. As a campaign sender, I want to understand that engagement caching has a bounded window (not
+12. As a campaign sender, I want to understand that engagement caching has a bounded window (not
     indefinite), so that I'm not surprised if someone who opens after that window still receives a
     follow-up campaign meant to exclude them.
-12. As a developer maintaining Looply, I want the engagement cache to be a narrow, clearly-scoped
+13. As a developer maintaining Looply, I want the engagement cache to be a narrow, clearly-scoped
     addition (timestamps only, not a full event log), so that Looply's stated boundary with Sendly
     stays intentional and legible rather than silently eroding.
-13. As a developer maintaining Looply, I want the segment rule tree to be evaluated by compiling it
+14. As a developer maintaining Looply, I want the segment rule tree to be evaluated by compiling it
     into SQLAlchemy filters against local tables, so that resolving a segment's audience is a single
     local query, not a live call out to Sendly on every campaign build or send.
+15. As a campaign sender, I want to see how many contacts a segment currently resolves to — while
+    still editing it, before saving — so that I get a warning if a rule tree I built (especially one
+    with no `list_membership` condition) is about to target a much bigger audience than I intended.
 
 ## Implementation Decisions
 
@@ -75,11 +91,12 @@ than one large change. Phase 1 depends on `tessera-sdk` changes being handled se
 Depends on `tessera-sdk`'s `SendlyClient` exposing the count fields (`delivered_count`,
 `bounced_count`, `complained_count`, `opened_count`) on `GetBroadcastResponse` and a per-email
 method (e.g. `list_emails(batch_id)`, wrapping Sendly's `GET /emails?batch_id=...`) returning each
-recipient's email plus `opened_at`/`clicked_at`. That SDK work is being handled separately and
-isn't part of this PRD; this phase assumes it lands first.
+recipient's email plus `opened_at`/`clicked_at`. That SDK work has already been merged and is
+available in `tessera-sdk` today, so Phase 1 is unblocked and can start immediately.
 
 Ships a visible, standalone improvement (user story 1–2) and builds the data foundation everything
-else depends on.
+else depends on. Nothing in this phase depends on the segment redesign below — it's unaffected by
+whether segments end up list-scoped or not.
 
 - **Schema**: add `opened_at: datetime | None` and `clicked_at: datetime | None` to
   `CampaignRecipient` (`app/models/campaign_recipient.py`). Deliberately narrow — timestamps only,
@@ -90,11 +107,21 @@ else depends on.
   `complained_count`, `opened_count`, `clicked_count`) — currently nothing is stored; today's
   `poll_campaign_status` task only reads `finished` to flip status, then discards the rest of the
   response.
+- **Send-flow change** (prerequisite for the task below): `_to_broadcast_recipient` in
+  `app/commands/campaign/send_campaign_command.py` must set `client_reference_id` on each
+  `BroadcastRecipient` (e.g. to `contact.id`) when building the broadcast send. This costs nothing
+  at send time and is what makes the polling task below able to match results back to a contact
+  without relying on the (mutable) email address — see "Known Risks" for why matching by email is
+  unsafe.
 - **New background task**, following the existing `poll_campaign_status` pattern
   (`app/tasks/poll_campaign_status.py`, same `build_sendly_client()` + per-item try/except so one
   bad lookup doesn't stop the batch): for each `completed` campaign still inside its polling
-  window, call the new SDK `list_emails(batch_id)` and update matching `CampaignRecipient` rows'
-  `opened_at`/`clicked_at`, and call `get_broadcast()` to refresh the campaign's result counts.
+  window, call the SDK's `iter_broadcast_recipients(batch_id=batch_id)` (not
+  `list_broadcast_recipients()` — the plain method returns only a single page; the iterator
+  transparently walks every page so campaigns with more than 50 recipients aren't silently
+  truncated) and, for each `BroadcastRecipientResult`, match its `client_reference_id` back to the
+  corresponding `CampaignRecipient`/`Contact` and update `opened_at`/`clicked_at`. Also call
+  `get_broadcast()` to refresh the campaign's result counts.
 - **Polling window**: a fixed, globally-configured duration (e.g. via app settings, defaulting to
   3 days) after `completed_at`, after which the task stops polling that campaign. Per-campaign
   override is explicitly out of scope for Phase 1 (see "Out of Scope") — global config only, to
@@ -107,59 +134,269 @@ else depends on.
   the existing campaign read schema/endpoint (`app/schemas/campaign.py`,
   `app/routers/campaign.py`) — no new endpoints.
 
-### Phase 2 — `Segment` model + campaign-activity conditions
+### Phase 2 — `Segment` model, rule engine (list membership + campaign-activity conditions)
 
-Ships the ability to build and save a segment based on prior-campaign engagement (user stories
-3–4, 7–8), the narrowest version of the feature that solves the original problem.
+Ships the ability to build and save a list-agnostic segment based on list membership and
+prior-campaign engagement (user stories 3–4, 6–8), the narrowest version of the feature that
+solves the original problem without hard-coding a list scope.
 
 - **New model** `Segment` (new file, e.g. `app/models/segment.py`), following existing model
   conventions (`TimestampMixin`, `SoftDeleteMixin`, UUID PK, `created_by_id` FK to `users`):
-  - `name: str`
-  - `contact_list_id: UUID` (FK to `contact_lists.id`, required — a segment is always scoped to
-    exactly one list, matching Mailchimp's Audience-scoped segments; this also means condition
-    types never need to express list membership themselves)
+  - `name: str` (unique per account/workspace, not per-list — segments are no longer namespaced
+    under a list)
   - `rule: JSONB` — the condition tree (see "Rule tree" below)
   - `created_by_id: UUID` (FK to `users.id`)
-- **Rule tree schema** (defined precisely in this phase, not before): a nested structure of groups
-  (`{"op": "and" | "or", "conditions": [...]}`) and leaf conditions. Phase 2 supports exactly one
-  leaf condition type: `campaign_activity` — `{"type": "campaign_activity", "campaign_id": UUID,
-  "event": "opened" | "clicked", "op": "has" | "has_not"}`. Resolved as a join against
-  `CampaignRecipient` filtered to the given `campaign_id`, checking whether the relevant timestamp
-  column is set.
+  - Deliberately **no** `contact_list_id` column. A segment has no owning list; any relationship to
+    a list exists only inside its rule tree, as a `list_membership` condition.
+- **Rule tree schema**: discriminated Pydantic models, not raw/free-form JSON — the API rejects
+  (HTTP 422) anything that doesn't parse into this shape, closing the resource-exhaustion surface
+  identified in "Known Risks" below. `Segment.rule` (JSONB) stores the validated tree's
+  `model_dump(mode="json")`.
+
+  Every operator, event name, and condition-type discriminator is a named constant (a `str, Enum`
+  member), never a bare string literal — both so a typo is a Python `NameError`/import failure
+  caught before a request is ever sent, not a silently-accepted-then-ignored value, and so
+  `app/utils/db/filtering.py`'s resolver code and any future condition type share one canonical
+  set of spellings instead of each call site re-typing `"not_in"` by hand.
+
+  ```python
+  MAX_TREE_DEPTH = 5       # a RuleGroup nested inside a RuleGroup counts as +1 depth
+  MAX_LEAVES = 25          # total leaf conditions anywhere in the tree
+  MAX_IN_VALUES = 100      # max items in a contact_field "in" value list (Phase 3)
+  MAX_STRING_LENGTH = 255  # max length of any string leaf value
+
+  class ConditionType(str, Enum):
+      LIST_MEMBERSHIP = "list_membership"
+      CAMPAIGN_ACTIVITY = "campaign_activity"
+      CONTACT_FIELD = "contact_field"       # Phase 3
+
+  class LogicalOp(str, Enum):
+      AND = "and"
+      OR = "or"
+
+  class ListMembershipOp(str, Enum):
+      IN = "in"
+      NOT_IN = "not_in"
+
+  class CampaignActivityEvent(str, Enum):
+      OPENED = "opened"
+      CLICKED = "clicked"
+
+  class CampaignActivityOp(str, Enum):
+      HAS = "has"
+      HAS_NOT = "has_not"
+
+  class ListMembershipCondition(BaseModel):
+      type: Literal[ConditionType.LIST_MEMBERSHIP] = ConditionType.LIST_MEMBERSHIP
+      list_id: UUID
+      op: ListMembershipOp
+
+  class CampaignActivityCondition(BaseModel):
+      type: Literal[ConditionType.CAMPAIGN_ACTIVITY] = ConditionType.CAMPAIGN_ACTIVITY
+      campaign_id: UUID
+      event: CampaignActivityEvent
+      op: CampaignActivityOp
+
+  Leaf = Annotated[
+      Union[ListMembershipCondition, CampaignActivityCondition],
+      Field(discriminator="type"),
+  ]
+
+  class RuleGroup(BaseModel):
+      op: LogicalOp
+      conditions: list["RuleNode"] = Field(min_length=1, max_length=MAX_LEAVES)
+
+  RuleNode = Union[RuleGroup, Leaf]  # RuleGroup has no discriminator field of its own;
+                                     # a node is a RuleGroup if it has "op"+"conditions",
+                                     # else validated against the Leaf union by "type"
+  RuleGroup.model_rebuild()
+
+  class SegmentRuleCreate(BaseModel):
+      root: RuleNode
+
+      @model_validator(mode="after")
+      def enforce_limits(self) -> "SegmentRuleCreate":
+          depth, leaves = _measure(self.root)  # walks the tree once
+          if depth > MAX_TREE_DEPTH:
+              raise ValueError(f"rule tree exceeds max depth {MAX_TREE_DEPTH}")
+          if leaves > MAX_LEAVES:
+              raise ValueError(f"rule tree exceeds max {MAX_LEAVES} leaf conditions")
+          return self
+  ```
+
+  Same rule applies going forward: Phase 3's `contact_field` condition must define
+  `ContactFieldName` and `ContactFieldOp` enums (mirroring the allow-lists below) rather than
+  typing `"contact_type"`/`"=="` as raw strings at each call site, and the resolver
+  (`app/repositories/segment_repository.py` or wherever it lands) must switch/match on these enum
+  members — never on the raw string values — so a new operator can't be introduced by silently
+  falling through to `apply_filters`'s permissive default.
+
+  Phase 2 supports exactly the two leaf types above:
+  - `list_membership` — resolved as a join against `ContactListMember` filtered to the given
+    `list_id`, checking `deleted_at IS NULL` for `ListMembershipOp.IN` (or its absence for
+    `ListMembershipOp.NOT_IN`). This is what makes "everyone in list X" expressible without a
+    segment needing a dedicated list-scope column.
+  - `campaign_activity` — resolved as a join against `CampaignRecipient` filtered to the given
+    `campaign_id`, checking whether the relevant timestamp column is set (see "Known Risks" for
+    the `CampaignActivityOp.HAS_NOT` semantics this must define precisely, and the lifecycle
+    validation `campaign_id` needs).
+  - A rule tree with **zero** `list_membership` conditions is valid and resolves against the
+    account's entire contact base — see "Out of Scope" for why this is intentionally unguarded.
+  - Phase 3's `contact_field` condition slots into the same `Leaf` union as a third member, with
+    its own field/operator/value-type allow-list (see Phase 3 below) rather than accepting
+    `apply_filters`'s permissive fallback — `ContactFieldOp` restricted to `==`/`!=`/`ilike`/`in`,
+    `ContactFieldName` restricted to the named `Contact` columns, string values capped at
+    `MAX_STRING_LENGTH`, `in` lists capped at `MAX_IN_VALUES`.
+
+  **Example rule trees** (shown as the `Segment.rule` JSON a validated `SegmentRuleCreate` would
+  serialize to — enum members serialize to their string `.value`, e.g. `ListMembershipOp.IN` →
+  `"in"`):
+
+  - The PRD's original motivating case — "the other 15 of 20 who didn't open last month's
+    campaign" — is a single leaf, no group needed:
+    ```json
+    {
+      "root": {
+        "type": "campaign_activity",
+        "campaign_id": "3fa2...c9d1",
+        "event": "opened",
+        "op": "has_not"
+      }
+    }
+    ```
+  - "Everyone in the Newsletter list" — the trivial one-condition segment the campaign-builder's
+    "pick a list" shortcut (Phase 3) creates behind the scenes:
+    ```json
+    {
+      "root": {
+        "type": "list_membership",
+        "list_id": "9c11...44ab",
+        "op": "in"
+      }
+    }
+    ```
+  - "In the Newsletter list AND clicked the Spring Sale campaign" — a two-leaf AND group, user
+    story 4's reward/upsell case:
+    ```json
+    {
+      "root": {
+        "op": "and",
+        "conditions": [
+          {"type": "list_membership", "list_id": "9c11...44ab", "op": "in"},
+          {"type": "campaign_activity", "campaign_id": "7ab0...12ef", "event": "clicked", "op": "has"}
+        ]
+      }
+    }
+    ```
+  - "In list A OR in list B, but not the Newsletter list" — nested groups (an OR group nested
+    inside an AND group; depth 2 of the allowed 5), exercising both group types together:
+    ```json
+    {
+      "root": {
+        "op": "and",
+        "conditions": [
+          {
+            "op": "or",
+            "conditions": [
+              {"type": "list_membership", "list_id": "list-a-id", "op": "in"},
+              {"type": "list_membership", "list_id": "list-b-id", "op": "in"}
+            ]
+          },
+          {"type": "list_membership", "list_id": "newsletter-id", "op": "not_in"}
+        ]
+      }
+    }
+    ```
+  - Phase 3 addition — "Company X AND did not open Campaign A" (user story 6's example),
+    combining a `contact_field` leaf with a `campaign_activity` leaf:
+    ```json
+    {
+      "root": {
+        "op": "and",
+        "conditions": [
+          {"type": "contact_field", "field": "company", "operator": "==", "value": "Acme Inc"},
+          {"type": "campaign_activity", "campaign_id": "3fa2...c9d1", "event": "opened", "op": "has_not"}
+        ]
+      }
+    }
+    ```
 - **Segment repository/resolver**: a new deep module responsible for compiling a rule tree into a
   SQLAlchemy filter/query against `Contact`/`ContactListMember`/`CampaignRecipient`, and returning
   the resolved contact set for a given segment. This is the piece most worth isolating and testing
   in isolation — the rule tree's shape is the interface; callers never need to know how it's
-  compiled to SQL.
-- **CRUD**: standard create/read/update/soft-delete for segments, scoped to their `contact_list_id`,
-  following the existing repository pattern (`SoftDeleteRepository`, as used by
-  `CampaignRepository`). New router endpoints under something like `/contact-lists/{id}/segments`,
-  mirroring the nesting style already used for `/contact-lists/{id}/members`.
+  compiled to SQL. The resolver exposes both a "resolve contacts" query and a cheap "resolve count"
+  variant (same compiled filter, wrapped in `COUNT(*)` instead of selecting rows) — the count is
+  never persisted; it's recomputed on demand.
+- **CRUD**: standard create/read/update/soft-delete for segments, following the existing repository
+  pattern (`SoftDeleteRepository`, as used by `CampaignRepository`). New top-level router endpoints
+  under `/segments` (not nested under `/contact-lists/{id}/...`, since a segment isn't owned by any
+  one list).
+- **Preview endpoint** (non-persisted stats): `GET /segments/{id}/preview` returns
+  `{"contact_count": int}` for a saved segment, computed live via the resolver's count query — no
+  caching, no new columns. `POST /segments/preview` accepts a raw rule tree body (same shape as
+  `Segment.rule`) and returns the same shape, so the UI can show a live count while a segment is
+  still being built/edited, before it's saved. Both routes reuse the same resolver code path as
+  segment-to-contact-set resolution at send time, so the preview count and the actual send audience
+  can never drift apart from independently-maintained logic.
 - Campaign wiring (attaching a segment to a campaign, and using it at send time) is explicitly
   **not** part of Phase 2 — this phase only makes segments buildable, saveable, and resolvable to a
   contact set on their own.
 
 ### Phase 3 — Contact-field conditions + campaign send-time wiring
 
-Completes the feature end-to-end (user stories 5, 6, 9–10).
+Completes the feature end-to-end (user stories 5, 9–11).
 
-- **Rule tree extension**: add a second leaf condition type, `contact_field` —
-  `{"type": "contact_field", "field": str, "operator": str, "value": Any}`, restricted to a fixed
-  allow-list of existing `Contact` columns (`contact_type`, `company`, `city`, `state`, `country`,
-  `is_active`) and the operators already supported by the existing `apply_filters` utility
-  (`app/utils/db/filtering.py`) — `==`, `!=`, `ilike`, `in`, etc. This condition type should reuse
-  `apply_filters`'s operator table rather than reimplementing comparison logic.
-- **Schema change**: add `segment_id: UUID | None` to `Campaign` (FK to `segments.id`, nullable).
-  `contact_list_id` remains required and unchanged — no migration needed for existing campaigns,
-  since a campaign with no `segment_id` behaves exactly as today.
-- **Send-flow change**: in `SendCampaignCommand` / `ContactListRepository.get_eligible_campaign_recipients`,
-  when a campaign has a `segment_id`, the segment's resolved contact set (Phase 2's resolver,
-  scoped to the campaign's own `contact_list_id`) is intersected with today's existing eligibility
-  filter (active, has email, deduplicated by email) — the segment narrows, it never replaces,
-  today's eligibility rules.
-- **Validation**: creating/updating a campaign with a `segment_id` must reject a segment whose
-  `contact_list_id` doesn't match the campaign's `contact_list_id` — enforced at the point Segment
-  scoping is meaningful at all.
+- **Rule tree extension**: add a third leaf condition type, `contact_field`, following the same
+  named-constant rule as Phase 2's leaves (no bare string literals for field names or operators):
+
+  ```python
+  class ContactFieldName(str, Enum):
+      CONTACT_TYPE = "contact_type"
+      COMPANY = "company"
+      CITY = "city"
+      STATE = "state"
+      COUNTRY = "country"
+      IS_ACTIVE = "is_active"
+
+  class ContactFieldOp(str, Enum):
+      EQ = "=="
+      NEQ = "!="
+      ILIKE = "ilike"
+      IN = "in"
+
+  class ContactFieldCondition(BaseModel):
+      type: Literal[ConditionType.CONTACT_FIELD] = ConditionType.CONTACT_FIELD
+      field: ContactFieldName
+      operator: ContactFieldOp
+      value: str | bool | list[str]
+  ```
+
+  `field` is restricted to `ContactFieldName`'s fixed allow-list of existing `Contact` columns;
+  `operator` is restricted to `ContactFieldOp`'s allow-list, a subset of what `apply_filters`
+  (`app/utils/db/filtering.py`) supports — this condition type should reuse `apply_filters`'s
+  comparison logic once `operator` has already been validated against `ContactFieldOp`, never pass
+  a raw unvalidated string into it. `Leaf` becomes
+  `Union[ListMembershipCondition, CampaignActivityCondition, ContactFieldCondition]`.
+- **Schema change**: replace `Campaign.contact_list_id` (currently required) with
+  `Campaign.segment_id: UUID` (FK to `segments.id`, **required**). A campaign's audience is always
+  "resolve this segment" — there's no longer a separate list step. No existing campaigns need to be
+  migrated/backfilled; this ships as a clean breaking schema change (existing campaign rows are
+  dropped, not carried forward).
+- **Send-flow change**: in `SendCampaignCommand` / the eligibility-filtering repository method
+  (formerly `ContactListRepository.get_eligible_campaign_recipients`, now driven by segment rather
+  than list), the segment's resolved contact set (Phase 2's resolver) is intersected with today's
+  existing eligibility filter (active, has email, deduplicated by email) — the segment defines the
+  target audience; the eligibility filter still applies on top of it, unchanged in its own logic.
+- **Segment-picker UX note** (backend-relevant only insofar as it shapes the API): for the common
+  "just send to this whole list" case, the campaign-creation flow can offer a "pick a list"
+  shortcut that transparently creates (or reuses) a trivial one-condition segment
+  (`list_membership` only) behind the scenes, so the more general model doesn't add friction to the
+  simple case. Exact UI is out of scope for this backend-only PRD, but the API must support
+  creating a segment and referencing it from a campaign in the same flow without extra round trips
+  becoming a UX problem.
+- No cross-segment/cross-list validation is needed at this point (unlike the earlier
+  list-scoped design) — since a segment is never tied to a specific list, there's no "segment's
+  list must match campaign's list" rule to enforce.
 
 ## Testing Decisions
 
@@ -178,19 +415,26 @@ and the Celery task's DB effects, not mocked-out internals).
   - `CampaignRepository`/model-level test that a completed campaign's counts round-trip correctly.
 - **Phase 2**:
   - The segment resolver is the module most worth isolating and testing thoroughly in isolation —
-    for a range of rule trees (single condition, AND, OR, nested groups, `has`/`has_not`) against
-    seeded `Contact`/`CampaignRecipient` fixtures, assert exactly which contacts resolve.
+    for a range of rule trees (single condition, AND, OR, nested groups, `has`/`has_not`,
+    `in`/`not_in`) against seeded `Contact`/`ContactListMember`/`CampaignRecipient` fixtures,
+    assert exactly which contacts resolve. Explicitly include a rule tree with zero
+    `list_membership` conditions and confirm it resolves against the whole contact base.
   - Repository-level CRUD tests for `Segment`, following `tests/app/repositories/test_contact_list_repository.py`'s
-    style (soft delete, scoping to `contact_list_id`).
-  - Router tests for the new segment endpoints, following `tests/app/routers/test_contact_list.py`.
+    style (soft delete), minus any list-scoping assertions since none apply.
+  - Router tests for the new top-level `/segments` endpoints, including both preview routes: the
+    saved-segment `GET /segments/{id}/preview` and the draft `POST /segments/preview`, asserting
+    the returned `contact_count` matches the resolver's count query against seeded fixtures.
+  - A resolver test asserting the "resolve count" path and the "resolve contacts" path agree
+    (`count == len(resolved_contacts)`) across the same range of rule trees used elsewhere in
+    Phase 2's resolver tests, so the two code paths can't silently drift.
 - **Phase 3**:
   - Resolver tests extended to cover `contact_field` conditions and mixed AND/OR trees combining
-    both condition types.
-  - `SendCampaignCommand` test asserting a campaign with a `segment_id` sends only to the
-    intersection of segment-resolved contacts and today's existing eligibility filter — extending
+    all three condition types.
+  - `SendCampaignCommand` test asserting a campaign sends only to the intersection of
+    segment-resolved contacts and today's existing eligibility filter — extending
     `tests/app/commands/test_send_campaign_command.py`.
-  - A validation test that attaching a segment scoped to a different `contact_list_id` than the
-    campaign's is rejected.
+  - A test that a campaign's `segment_id` is required (schema/DB level) and that a segment with no
+    `list_membership` condition resolves and sends correctly across contacts from multiple lists.
 
 Ask the user which of these modules they want tests written for before implementation begins on
 each phase — this PRD identifies the segment resolver (Phase 2) as the highest-value module to get
@@ -200,11 +444,16 @@ right, since every later phase and the send flow itself depends on its correctne
 
 - A custom-fields/tags system on `Contact` — condition types are restricted to existing columns.
   Adding tags is a separate project.
-- Segments spanning multiple contact lists, or list-agnostic/reusable-anywhere segments — segments
-  are always scoped to exactly one list, matching Mailchimp.
-- A live "estimated recipient count" preview while building a segment (Mailchimp has this) — not
-  committed to any phase here; worth a follow-up PRD once segments exist and usage patterns are
-  clearer.
+- Persisting the segment's contact count (e.g. a `contact_count` column updated on some schedule).
+  The count in Phase 2's preview endpoint is deliberately always computed live — persisting it
+  would require cache-invalidation logic every time underlying `Contact`/`ContactListMember`/
+  `CampaignRecipient` data changes, which is unnecessary complexity for a number whose only job is
+  to warn the user in the moment they're looking at it.
+- Anything beyond `contact_count` in the preview response (estimated deliverability, engagement
+  rate forecasts, etc.) — Phase 2 ships the count only.
+- Requiring every segment to include at least one `list_membership` condition — considered and
+  explicitly rejected; segments may resolve against the entire contact base with no list filter at
+  all. See "Solution" and Phase 2's rule tree notes.
 - "Did not open **any** campaign" (as opposed to a specific named campaign) as a condition variant —
   not included in Phase 2's `campaign_activity` condition; would need its own design if wanted.
 - Per-campaign override of the polling window — Phase 1 ships a single global default only.
@@ -213,20 +462,127 @@ right, since every later phase and the send flow itself depends on its correctne
 - Full mirroring of Sendly's delivery-event history (bounces, complaints, multiple opens/clicks per
   recipient with timestamps) — the cache is deliberately restricted to first-occurrence
   `opened_at`/`clicked_at`.
+- Migrating/backfilling existing `Campaign.contact_list_id` data — there is no production data to
+  preserve; Phase 3 ships `segment_id` as a required column with existing campaign rows dropped,
+  not converted.
+
+## Known Risks (from design review)
+
+This PRD was reviewed before implementation began. The findings below are folded in here
+(the standalone review doc has been removed) so risks stay attached to the design they apply to,
+rather than living in a separate file that can drift out of sync. Findings are ordered by
+severity; each has been revalidated against the current design and the current state of `sendly`
+and `tessera-sdk-py` (both under `~/sites/linden-family/`) as of 2026-08-29.
+
+- **[RESOLVED] Sendly click data.** Originally: Sendly's `Email` model/schema and broadcast
+  response exposed only `opened_at`, not `clicked_at`/`clicked_count`, which Phase 1 depends on.
+  As of 2026-08-29, `sendly/app/models/email.py` has both `opened_at` and `clicked_at` columns,
+  `sendly/app/schemas/email.py` and `sendly/app/schemas/broadcast.py` expose `clicked_at` and
+  `clicked_count` respectively, and the SDK's `GetBroadcastResponse` is in sync. No further action
+  needed — Phase 1 can be implemented as written.
+
+- **[RESOLVED] Pagination on `list_emails()`/`list_broadcast_recipients()`.** Sendly's paginated
+  endpoints (`sendly/app/routers/email.py`, `.../broadcasts/{batch_id}/recipients`) return proper
+  `total`/`page`/`size`/`pages` metadata, but the SDK's plain `list_emails()` and
+  `list_broadcast_recipients()` each still return a single page. Merged into `tessera-sdk-py`:
+  `iter_emails(...)` and `iter_broadcast_recipients(...)`, generators that transparently loop
+  `page` until `page >= pages` and yield every matching row across all pages. Phase 1's polling
+  task should use `iter_broadcast_recipients(batch_id=batch_id)` specifically (not `iter_emails`)
+  — its `BroadcastRecipientResult` carries `client_reference_id` back, which is what resolves the
+  mutable-email risk below.
+
+- **[OPEN, cheaper fix now available] Engagement can't reliably map back to a mutable contact.**
+  `CampaignRecipient` stores only `campaign_id` and `contact_id`; the polling task is expected to
+  match Sendly results by recipient email. If a contact's email changes after a campaign was sent,
+  polling returns the old address, matches nothing, and that recipient is permanently
+  misclassified as a non-opener.
+  Originally recommended: add an immutable `sent_email` column to `CampaignRecipient`. A cheaper
+  fix is now available instead — `tessera-sdk-py`'s `BroadcastRecipient` schema already has a
+  `client_reference_id: Optional[UUID]` field created exactly for this ("correlating this
+  recipient with its results later ... without matching on the mutable email address"), and
+  `iter_broadcast_recipients()` (added in the pagination fix above) returns it back on each
+  `BroadcastRecipientResult`. Confirmed as of 2026-08-29:
+  `app/commands/campaign/send_campaign_command.py`'s `_to_broadcast_recipient` (lines 134–146)
+  does **not** currently set `client_reference_id` when building the `BroadcastRecipient` sent to
+  Sendly, even though `mark_sending` (lines 120–124) already has `recipient_contact_ids` in hand
+  at send time. **Action required** (Phase 1): set `client_reference_id=contact.id` (or
+  `campaign_recipient.id`, if that row is created before send) in `_to_broadcast_recipient`, then
+  have the polling task match `iter_broadcast_recipients()` rows back to `CampaignRecipient` by
+  `client_reference_id` instead of by email — no new column needed, and the match survives a
+  contact's email changing after send.
+
+- **[SCHEMA DEFINED, not yet implemented] Unconstrained recursive rule trees are a
+  resource-exhaustion surface.** Originally: the rule tree was specified only loosely as recursive
+  JSON with `Any` leaf values and open-ended operators — the reused `apply_filters` utility
+  (`app/utils/db/filtering.py`) silently ignores invalid fields and coerces unknown operators into
+  equality rather than rejecting them, so a caller could submit thousands of nested OR groups or
+  huge `in` lists, producing expensive SQL or recursion failures. Phase 2's "Rule tree schema"
+  above now pins this down precisely: discriminated Pydantic models (`RuleGroup`/`Leaf` union,
+  `Field(discriminator="type")`), `MAX_TREE_DEPTH = 5`, `MAX_LEAVES = 25`, `MAX_STRING_LENGTH =
+  255`, `MAX_IN_VALUES = 100`, and a depth/leaf-count validator that rejects anything over those
+  limits — no raw JSON accepted, no reliance on `apply_filters`'s permissive fallback. **Remaining
+  action**: implement this schema in Phase 2's actual code (`app/schemas/segment.py` or similar);
+  the design above is not yet code. Phase 3's `contact_field` condition must be added to the same
+  `Leaf` union with its own bounded field/operator/value-type allow-list, not left to
+  `apply_filters`'s defaults.
+
+- **[OPEN] `campaign_activity` references lack lifecycle validation.** Nothing requires a
+  `campaign_activity.campaign_id` to reference a campaign that actually exists or has completed.
+  A segment referencing a draft, deleted, or never-existent campaign resolves every contact as
+  `has_not` opened/clicked it (no matching `CampaignRecipient` rows exist), silently producing a
+  much broader audience than intended instead of failing explicitly. **Action required** (Phase 2):
+  on segment create/update, require every referenced `campaign_activity.campaign_id` to exist and
+  be `completed`; revalidate this at resolution time too, so a campaign deleted after the segment
+  was saved fails explicitly rather than silently widening the audience.
+
+- **[OPEN] `has_not` has no defined set semantics.** It's unspecified whether a contact who was
+  never sent the referenced campaign at all (no `CampaignRecipient` row) counts as "has not
+  opened" it. An inner-join implementation and a `NOT EXISTS` implementation are both consistent
+  with the current wording but produce different audiences. **Action required** (Phase 2): define
+  `has_not` explicitly as requiring an *existing* `CampaignRecipient` row for the referenced
+  campaign with the relevant timestamp column null — i.e., "was sent it and didn't open/click it,"
+  not "wasn't sent it." Contacts never sent that campaign should not qualify as `has_not`.
+
+- **[OPEN] The "data as of" indicator has no trustworthy timestamp to point at.** The schema adds
+  engagement values but no successful-sync timestamp, and polling deliberately swallows per-item
+  failures (matching the existing `poll_campaign_status` pattern). If refreshes fail silently for
+  days, the UI has nothing but `completed_at` or the polling-window end to infer freshness from,
+  and would present stale data as current. **Action required** (Phase 1): add
+  `engagement_last_synced_at` (updated only after a fully successful refresh) and a fixed
+  `engagement_polling_expires_at` to `Campaign`, and expose both through the API so the results UI
+  can build an honest "data as of" indicator.
+
+- **[OPEN] Claimed phase value contradicts the phase boundaries.** Further Notes below claims
+  "Phase 2 alone already solves the original 'exclude prior openers' problem," but Phase 2
+  explicitly excludes attaching/applying a segment to a campaign — that's Phase 3. As written,
+  after Phases 1 and 2 ship, a user still cannot actually send a follow-up campaign restricted to
+  a segment. **Action required**: either move `segment_id` and send-time segment resolution into
+  Phase 2 (so `list_membership`/`campaign_activity` segments are usable end-to-end before
+  `contact_field` conditions exist, with `contact_field` becoming the sole Phase 3 addition), or
+  stop describing Phase 2 as independently solving the user-facing problem.
 
 ## Further Notes
 
 - The `tessera-sdk` changes Phase 1 depends on (`GetBroadcastResponse` count fields, a
-  per-email/batch listing method) are being handled outside this PRD, in `tessera-sdk-py`. Phase 1
-  work should not start until that lands.
+  per-email/batch listing method) were handled outside this PRD, in `tessera-sdk-py`, and have
+  already been merged and released. Phase 1 work is unblocked.
 - This PRD represents a deliberate, scoped reversal of a rule currently stated in
   `docs/campaign.md` ("Looply must not create its own... delivery-event table... Sendly is the
   source of truth for those concerns"). Phase 1 must update that document to describe the new
   `opened_at`/`clicked_at` cache and its bounded-window/staleness trade-off honestly, rather than
   leaving the doc contradicting the code.
+- **Design history**: an earlier version of this PRD scoped every `Segment` to exactly one
+  `contact_list_id`, mirroring Mailchimp's Audience-scoped segments. That was reconsidered because
+  it forced a rigid two-step flow (list, then segment-on-list) and made segments non-reusable
+  across lists, even though `ContactListMember` already supports many-to-many list membership. The
+  current design (Loops.so-style: list membership as just one filter condition, segments fully
+  list-agnostic) removes that rigidity at the cost of allowing a segment to resolve to the entire
+  contact base if the user builds it that way — an accepted trade-off, mitigated by Phase 2's
+  non-persisted `contact_count` preview endpoint, which lets the UI warn the user in the moment
+  rather than after a campaign is already sent.
 - The phase boundaries are chosen so each is independently valuable: Phase 1 alone already answers
   "did my campaign work" inside Looply; Phase 2 alone already solves the original "exclude prior
-  openers" problem for the campaign-activity case even before contact-field conditions exist;
-  Phase 3 completes the general filter engine. Phases can be re-sequenced or split further if
-  needed, but this ordering was chosen to ship the original problem's solution (Phase 2) as early
-  as possible.
+  openers" problem (and subsumes "target a specific list," via `list_membership`) even before
+  contact-field conditions exist; Phase 3 completes the general filter engine and wires it into
+  campaign sending. Phases can be re-sequenced or split further if needed, but this ordering was
+  chosen to ship the original problem's solution (Phase 2) as early as possible.

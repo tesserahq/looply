@@ -6,10 +6,14 @@ from fastapi_pagination.ext.sqlalchemy import paginate
 
 from app.db import get_db
 from app.models.contact import Contact
+from app.models.custom_field_definition import (
+    CustomFieldDefinition as CustomFieldDefinitionModel,
+)
 from app.schemas.custom_field_definition import (
     CustomFieldDefinition,
     CustomFieldDefinitionCreate,
     CustomFieldDefinitionCreateRequest,
+    CustomFieldDefinitionUpdate,
 )
 from app.schemas.contact_custom_field_value import (
     ContactCustomFieldValue,
@@ -24,7 +28,10 @@ from app.repositories.contact_custom_field_value_repository import (
     CustomFieldValueTypeError,
     UndefinedCustomFieldError,
 )
-from app.routers.utils.dependencies import get_contact_by_external_id
+from app.routers.utils.dependencies import (
+    get_contact_by_external_id,
+    get_custom_field_definition_by_id,
+)
 from app.schemas.user import User
 from tessera_sdk.server.dependencies.auth import get_current_user
 from app.auth.rbac import build_rbac_dependencies
@@ -75,6 +82,29 @@ def list_custom_field_definitions(
 ):
     """List all active custom field definitions with pagination."""
     return paginate(db, CustomFieldDefinitionRepository(db).get_definitions_query())
+
+
+@router.get("/{definition_id}", response_model=CustomFieldDefinition)
+def get_custom_field_definition(
+    definition: CustomFieldDefinitionModel = Depends(get_custom_field_definition_by_id),
+    _authorized: bool = Depends(rbac["read"]),
+):
+    """Get a custom field definition by ID."""
+    return definition
+
+
+@router.put("/{definition_id}", response_model=CustomFieldDefinition)
+def update_custom_field_definition(
+    update_data: CustomFieldDefinitionUpdate,
+    definition: CustomFieldDefinitionModel = Depends(get_custom_field_definition_by_id),
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["update"]),
+):
+    """Update a custom field definition's label - the only mutable attribute.
+    name and value_type are immutable; delete and recreate to change either."""
+    return CustomFieldDefinitionRepository(db).update_definition(
+        definition.id, update_data
+    )
 
 
 @router.delete("/{definition_id}", status_code=status.HTTP_204_NO_CONTENT)

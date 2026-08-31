@@ -5,9 +5,13 @@ from app.db import get_db
 from app.repositories.contact_repository import ContactRepository
 from app.repositories.campaign_repository import CampaignRepository
 from app.repositories.segment_repository import SegmentRepository
+from app.repositories.custom_field_definition_repository import (
+    CustomFieldDefinitionRepository,
+)
 from app.models.contact import Contact
 from app.models.campaign import Campaign
 from app.models.segment import Segment
+from app.models.custom_field_definition import CustomFieldDefinition
 
 
 def get_contact_by_id(contact_id: UUID, db: Session = Depends(get_db)) -> Contact:
@@ -109,3 +113,29 @@ def get_segment_by_id(segment_id: UUID, db: Session = Depends(get_db)) -> Segmen
             status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found"
         )
     return segment
+
+
+def get_custom_field_definition_by_id(
+    definition_id: UUID, db: Session = Depends(get_db)
+) -> CustomFieldDefinition:
+    """
+    Dependency to get a custom field definition by ID.
+    Raises 404 if not found (or soft-deleted).
+
+    Args:
+        definition_id: The ID of the definition to retrieve
+        db: Database session
+
+    Returns:
+        CustomFieldDefinition: The definition instance
+
+    Raises:
+        HTTPException: 404 if not found
+    """
+    definition = CustomFieldDefinitionRepository(db).get_definition(definition_id)
+    if not definition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Custom field definition not found",
+        )
+    return definition

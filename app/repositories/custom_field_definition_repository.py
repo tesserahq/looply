@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.models.custom_field_definition import CustomFieldDefinition
 from app.repositories.soft_delete_repository import SoftDeleteRepository
-from app.schemas.custom_field_definition import CustomFieldDefinitionCreate
+from app.schemas.custom_field_definition import (
+    CustomFieldDefinitionCreate,
+    CustomFieldDefinitionUpdate,
+)
 
 
 class CustomFieldDefinitionNameConflictError(ValueError):
@@ -70,6 +73,25 @@ class CustomFieldDefinitionRepository(SoftDeleteRepository[CustomFieldDefinition
             raise CustomFieldDefinitionNameConflictError(
                 f"A custom field named {definition.name!r} already exists"
             ) from e
+        self.db.refresh(db_definition)
+        return db_definition
+
+    def update_definition(
+        self, definition_id: UUID, update: CustomFieldDefinitionUpdate
+    ) -> Optional[CustomFieldDefinition]:
+        """
+        Update a field definition's label - the only mutable attribute. name and
+        value_type are immutable (see the PRD); a definition must be deleted and
+        recreated to change either.
+        """
+        db_definition = self.get_definition(definition_id)
+        if not db_definition:
+            return None
+
+        if update.label is not None:
+            db_definition.label = update.label
+
+        self.db.commit()
         self.db.refresh(db_definition)
         return db_definition
 

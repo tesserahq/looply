@@ -45,6 +45,44 @@ def test_list_custom_field_definitions(client_test_user, test_custom_field_defin
     assert str(test_custom_field_definition.id) in ids
 
 
+def test_get_custom_field_definition(client_test_user, test_custom_field_definition):
+    response = client_test_user.get(
+        f"/custom-field-definitions/{test_custom_field_definition.id}"
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["id"] == str(test_custom_field_definition.id)
+    assert data["name"] == test_custom_field_definition.name
+
+
+def test_get_custom_field_definition_not_found(client_test_user):
+    response = client_test_user.get(f"/custom-field-definitions/{uuid4()}")
+    assert response.status_code == 404
+
+
+def test_update_custom_field_definition_label(
+    client_test_user, test_custom_field_definition
+):
+    response = client_test_user.put(
+        f"/custom-field-definitions/{test_custom_field_definition.id}",
+        json={"label": "New Label"},
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["label"] == "New Label"
+    assert data["name"] == test_custom_field_definition.name
+    assert data["value_type"] == test_custom_field_definition.value_type
+
+
+def test_update_custom_field_definition_not_found(client_test_user):
+    response = client_test_user.put(
+        f"/custom-field-definitions/{uuid4()}", json={"label": "New Label"}
+    )
+    assert response.status_code == 404
+
+
 def test_delete_custom_field_definition(client_test_user, test_custom_field_definition):
     response = client_test_user.delete(
         f"/custom-field-definitions/{test_custom_field_definition.id}"

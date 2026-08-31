@@ -73,7 +73,10 @@ class EventFieldMappingRepository(SoftDeleteRepository[EventFieldMapping]):
                 raise InvalidEventFieldMappingError(
                     f"{mapping.target_field!r} is not a recognized Contact field"
                 )
-            if mapping.is_identity_key and mapping.target_field not in IDENTITY_KEY_TARGETS:
+            if (
+                mapping.is_identity_key
+                and mapping.target_field not in IDENTITY_KEY_TARGETS
+            ):
                 raise InvalidEventFieldMappingError(
                     "is_identity_key mappings must target one of "
                     f"{sorted(IDENTITY_KEY_TARGETS)}, got {mapping.target_field!r}"

@@ -70,12 +70,16 @@ def upgrade() -> None:
     # --- contacts: provenance + email uniqueness ---
     op.add_column("contacts", sa.Column("source", sa.String(), nullable=True))
 
-    duplicate_emails = op.get_bind().execute(
-        sa.text(
-            "SELECT email FROM contacts WHERE email IS NOT NULL AND deleted_at IS NULL "
-            "GROUP BY email HAVING COUNT(*) > 1"
+    duplicate_emails = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "SELECT email FROM contacts WHERE email IS NOT NULL AND deleted_at IS NULL "
+                "GROUP BY email HAVING COUNT(*) > 1"
+            )
         )
-    ).fetchall()
+        .fetchall()
+    )
     if duplicate_emails:
         emails = ", ".join(row[0] for row in duplicate_emails)
         raise RuntimeError(

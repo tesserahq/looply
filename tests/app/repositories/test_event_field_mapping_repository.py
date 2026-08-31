@@ -140,9 +140,7 @@ def test_create_identity_key_mapping_on_non_identity_field_rejected(db, test_use
         )
 
 
-def test_create_second_identity_key_mapping_for_same_event_type_rejected(
-    db, test_user
-):
+def test_create_second_identity_key_mapping_for_same_event_type_rejected(db, test_user):
     repository = EventFieldMappingRepository(db)
     repository.create_mapping(
         EventFieldMappingCreate(

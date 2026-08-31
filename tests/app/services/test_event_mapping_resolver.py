@@ -67,9 +67,7 @@ def test_custom_field_mapping_resolves_into_custom_field_values():
 
 
 def test_identity_key_mapping_sets_identity_not_contact_field_values():
-    mapping = _contact_field_mapping(
-        "person.id", "external_id", is_identity_key=True
-    )
+    mapping = _contact_field_mapping("person.id", "external_id", is_identity_key=True)
     event_data = {"person": {"id": "abc-123"}}
 
     result = resolve([mapping], event_data)
@@ -89,9 +87,7 @@ def test_missing_path_is_skipped_not_an_error():
 
 
 def test_identity_key_missing_path_leaves_no_identity():
-    mapping = _contact_field_mapping(
-        "person.id", "external_id", is_identity_key=True
-    )
+    mapping = _contact_field_mapping("person.id", "external_id", is_identity_key=True)
 
     result = resolve([mapping], {"person": {}})
 

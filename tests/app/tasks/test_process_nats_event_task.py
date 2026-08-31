@@ -49,8 +49,7 @@ def test_untracked_event_type_is_dropped(db):
 
     assert event_id is None
     assert (
-        ContactRepository(db).get_contact_by_external_id("person-external-id")
-        is None
+        ContactRepository(db).get_contact_by_external_id("person-external-id") is None
     )
 
 

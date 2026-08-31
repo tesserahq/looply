@@ -63,10 +63,11 @@ class EventFieldMappingCreateRequest(BaseModel):
                 raise ValueError(
                     'target_field must not be set when target_type="custom_field"'
                 )
-        if self.is_identity_key and self.target_type != EventFieldMappingTargetType.CONTACT_FIELD:
-            raise ValueError(
-                'is_identity_key requires target_type="contact_field"'
-            )
+        if (
+            self.is_identity_key
+            and self.target_type != EventFieldMappingTargetType.CONTACT_FIELD
+        ):
+            raise ValueError('is_identity_key requires target_type="contact_field"')
         return self
 
 

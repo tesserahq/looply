@@ -1,12 +1,10 @@
 from datetime import datetime, timezone
 
-from app.repositories.contact_custom_event_repository import (
-    ContactCustomEventRepository,
-)
+from app.repositories.custom_event_repository import CustomEventRepository
 
 
 def test_create_event(db, test_contact):
-    repository = ContactCustomEventRepository(db)
+    repository = CustomEventRepository(db)
     event = repository.create_event(
         contact_id=test_contact.id,
         name="com.mylinden.person.created",
@@ -24,7 +22,7 @@ def test_create_event(db, test_contact):
 
 def test_create_event_is_append_only(db, test_contact):
     """A second event for the same contact/name is its own row, not an overwrite."""
-    repository = ContactCustomEventRepository(db)
+    repository = CustomEventRepository(db)
     repository.create_event(
         contact_id=test_contact.id,
         name="com.mylinden.person.created",
@@ -45,7 +43,7 @@ def test_create_event_is_append_only(db, test_contact):
 
 
 def test_list_events_for_contact_filters_by_name(db, test_contact):
-    repository = ContactCustomEventRepository(db)
+    repository = CustomEventRepository(db)
     repository.create_event(
         contact_id=test_contact.id,
         name="com.mylinden.person.created",
@@ -69,5 +67,5 @@ def test_list_events_for_contact_filters_by_name(db, test_contact):
 
 
 def test_list_events_for_contact_empty(db, test_contact):
-    repository = ContactCustomEventRepository(db)
+    repository = CustomEventRepository(db)
     assert repository.list_events_for_contact(test_contact.id) == []

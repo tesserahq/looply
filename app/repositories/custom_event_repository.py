@@ -4,12 +4,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.models.contact_custom_event import ContactCustomEvent
+from app.models.custom_event import CustomEvent
 
 
-class ContactCustomEventRepository:
-    """Repository for the append-only per-contact custom event log. No update/delete -
-    every ingested event is its own row (see
+class CustomEventRepository:
+    """Repository for the append-only custom event log. No update/delete - every
+    ingested event is its own row (see
     docs/prds/0002-contact-custom-fields-and-events.md, "Custom Events").
     """
 
@@ -23,9 +23,9 @@ class ContactCustomEventRepository:
         occurred_at: datetime,
         properties: dict,
         raw_envelope: dict,
-    ) -> ContactCustomEvent:
+    ) -> CustomEvent:
         """Record a new event against a contact."""
-        event = ContactCustomEvent(
+        event = CustomEvent(
             contact_id=contact_id,
             name=name,
             occurred_at=occurred_at,
@@ -39,12 +39,10 @@ class ContactCustomEventRepository:
 
     def list_events_for_contact(
         self, contact_id: UUID, name: Optional[str] = None
-    ) -> List[ContactCustomEvent]:
+    ) -> List[CustomEvent]:
         """List a contact's event history, most recent first, optionally filtered by
         event name (user story 11)."""
-        query = self.db.query(ContactCustomEvent).filter(
-            ContactCustomEvent.contact_id == contact_id
-        )
+        query = self.db.query(CustomEvent).filter(CustomEvent.contact_id == contact_id)
         if name is not None:
-            query = query.filter(ContactCustomEvent.name == name)
-        return query.order_by(ContactCustomEvent.occurred_at.desc()).all()
+            query = query.filter(CustomEvent.name == name)
+        return query.order_by(CustomEvent.occurred_at.desc()).all()

@@ -24,7 +24,10 @@ class EventFieldMapping(Base, TimestampMixin, SoftDeleteMixin):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # Exact match against the envelope's event_type (e.g. "com.mylinden.person.created").
-    # No wildcards - keep matching simple; revisit if a real need for it shows up.
+    # No wildcards - keep matching simple; revisit if a real need for it shows up. Not
+    # a FK to TrackedEventType - a mapping only has any effect once/if its event_type
+    # is also tracked (see app.tasks.process_nats_event_task), but can be pre-created
+    # before that registration exists.
     event_type: Mapped[str] = mapped_column(String, nullable=False)
     # Dot-path into event_data (e.g. "account.family_member_count"). Resolved at
     # ingestion time - if any segment is missing, the mapping is silently skipped

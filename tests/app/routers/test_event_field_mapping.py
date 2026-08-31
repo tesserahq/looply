@@ -1,9 +1,7 @@
 from uuid import uuid4
 
 
-def test_create_event_field_mapping(
-    client_test_user, test_custom_field_definition
-):
+def test_create_event_field_mapping(client_test_user, test_custom_field_definition):
     payload = {
         "event_type": "com.mylinden.person.created",
         "source_path": "account.family_member_count",

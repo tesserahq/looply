@@ -1,11 +1,11 @@
 import pytest
-from app.models.contact_custom_event import ContactCustomEvent
+from app.models.custom_event import CustomEvent
 
 
 @pytest.fixture(scope="function")
-def test_contact_custom_event(db, faker, test_contact):
+def test_custom_event(db, faker, test_contact):
     """Create a custom event for test_contact."""
-    event = ContactCustomEvent(
+    event = CustomEvent(
         contact_id=test_contact.id,
         name="com.mylinden.person.created",
         occurred_at=faker.date_time(),

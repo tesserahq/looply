@@ -50,9 +50,7 @@ def test_get_mappings_for_event_type_no_match(db):
     )
 
 
-def test_delete_mapping_stops_it_matching(
-    db, test_custom_field_definition, test_user
-):
+def test_delete_mapping_stops_it_matching(db, test_custom_field_definition, test_user):
     repository = EventFieldMappingRepository(db)
     mapping = repository.create_mapping(
         EventFieldMappingCreate(
@@ -64,9 +62,7 @@ def test_delete_mapping_stops_it_matching(
     )
 
     assert repository.delete_mapping(mapping.id) is True
-    assert (
-        repository.get_mappings_for_event_type("com.mylinden.person.created") == []
-    )
+    assert repository.get_mappings_for_event_type("com.mylinden.person.created") == []
 
 
 def test_delete_mapping_not_found(db):

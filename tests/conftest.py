@@ -45,8 +45,9 @@ pytest_plugins = [
     "tests.fixtures.campaign_fixtures",
     "tests.fixtures.segment_fixtures",
     "tests.fixtures.custom_field_fixtures",
-    "tests.fixtures.contact_custom_event_fixtures",
+    "tests.fixtures.custom_event_fixtures",
     "tests.fixtures.event_field_mapping_fixtures",
+    "tests.fixtures.tracked_event_type_fixtures",
 ]
 
 logger = logging.getLogger(__name__)

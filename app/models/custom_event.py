@@ -7,16 +7,22 @@ import uuid
 from app.db import Base
 
 
-class ContactCustomEvent(Base, TimestampMixin):
-    """An append-only occurrence recorded against a contact, ingested from a Linden
-    domain event over NATS. No SoftDeleteMixin and no update/upsert method - every
-    ingested event is its own row (see docs/prds/0002-contact-custom-fields-and-events.md,
-    "Custom Events"). Unlike CustomFieldDefinition, event names need no upfront
-    definition - the operator UI derives a browsable list from what's actually been
-    recorded.
+class CustomEvent(Base, TimestampMixin):
+    """An append-only occurrence ingested from a Linden domain event over NATS, tied
+    to the contact it was resolved against.
+
+    Deliberately not named ContactCustomEvent: Looply's NATS subscription sees every
+    event type on the shared stream, not just contact-relevant ones - only event
+    types registered in TrackedEventType are ever turned into a row here (see
+    app.tasks.process_nats_event_task). The contact link is one property of an
+    event, not its primary identity.
+
+    No SoftDeleteMixin and no update/upsert method - every ingested event is its
+    own row (see docs/prds/0002-contact-custom-fields-and-events.md, "Custom
+    Events").
     """
 
-    __tablename__ = "contact_custom_events"
+    __tablename__ = "custom_events"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     contact_id: Mapped[UUID] = mapped_column(
@@ -24,8 +30,10 @@ class ContactCustomEvent(Base, TimestampMixin):
         ForeignKey("contacts.id", ondelete="CASCADE"),
         nullable=False,
     )
-    # The envelope's event_type (e.g. "com.mylinden.person.updated"). Free-form -
-    # there's no FieldValueType-style lock to enforce, so nothing to pre-register.
+    # The envelope's event_type (e.g. "com.mylinden.person.updated"). Matched
+    # against TrackedEventType.event_type at ingestion time, but stored as a plain
+    # string rather than a FK - a recorded event is a historical fact that should
+    # survive the tracked-type registration later being deleted.
     name: Mapped[str] = mapped_column(String, nullable=False)
     # The envelope's time.
     occurred_at: Mapped[DateTime] = mapped_column(DateTime, nullable=False)

@@ -11,11 +11,15 @@ from app.repositories.custom_field_definition_repository import (
 from app.repositories.event_field_mapping_repository import (
     EventFieldMappingRepository,
 )
+from app.repositories.tracked_event_type_repository import (
+    TrackedEventTypeRepository,
+)
 from app.models.contact import Contact
 from app.models.campaign import Campaign
 from app.models.segment import Segment
 from app.models.custom_field_definition import CustomFieldDefinition
 from app.models.event_field_mapping import EventFieldMapping
+from app.models.tracked_event_type import TrackedEventType
 
 
 def get_contact_by_id(contact_id: UUID, db: Session = Depends(get_db)) -> Contact:
@@ -169,3 +173,31 @@ def get_event_field_mapping_by_id(
             detail="Event field mapping not found",
         )
     return mapping
+
+
+def get_tracked_event_type_by_id(
+    tracked_event_type_id: UUID, db: Session = Depends(get_db)
+) -> TrackedEventType:
+    """
+    Dependency to get a tracked event type by ID.
+    Raises 404 if not found (or soft-deleted).
+
+    Args:
+        tracked_event_type_id: The ID of the registration to retrieve
+        db: Database session
+
+    Returns:
+        TrackedEventType: The registration instance
+
+    Raises:
+        HTTPException: 404 if not found
+    """
+    tracked = TrackedEventTypeRepository(db).get_tracked_event_type(
+        tracked_event_type_id
+    )
+    if not tracked:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tracked event type not found",
+        )
+    return tracked

@@ -3,7 +3,13 @@
 Mirrors orcha's process_nats_event_task split (~/sites/linden-family/orcha) - the
 NATS handler in run_nats_worker.py only dispatches the raw message dict here via
 .delay(msg), decoupling the NATS ack from DB work. All envelope parsing, Contact
-upsert, and ContactCustomEvent creation happens in this task.
+upsert, and CustomEvent creation happens in this task.
+
+Looply's NATS subscription sees every event type on the shared stream (subscribed
+via "com.>"), not just contact-relevant ones. An event whose type isn't registered
+in TrackedEventType is dropped up front - no Contact resolution/auto-create, no
+CustomEvent row, no EventFieldMapping applied - so untracked traffic never causes
+DB writes or junk contacts.
 
 Also applies any EventFieldMapping rows matching the event's type - a host-
 configured way to derive a Custom Field value directly from a field in the event's
@@ -20,9 +26,7 @@ from typing import Dict, Optional
 from sqlalchemy.orm import Session
 
 from app.core.celery_app import celery_app
-from app.repositories.contact_custom_event_repository import (
-    ContactCustomEventRepository,
-)
+from app.repositories.custom_event_repository import CustomEventRepository
 from app.repositories.contact_custom_field_value_repository import (
     ContactCustomFieldValueRepository,
     CustomFieldValueTypeError,
@@ -31,6 +35,9 @@ from app.repositories.contact_custom_field_value_repository import (
 from app.repositories.contact_repository import ContactRepository
 from app.repositories.event_field_mapping_repository import (
     EventFieldMappingRepository,
+)
+from app.repositories.tracked_event_type_repository import (
+    TrackedEventTypeRepository,
 )
 from app.utils.db.db_session_helper import db_session
 
@@ -70,8 +77,8 @@ def _apply_field_mappings(
     field. A mapping that doesn't resolve (missing path) or whose extracted value
     doesn't match the target field's locked value_type is skipped and logged -
     there's no caller on this ingestion path to reject the write back to, so a bad
-    mapping/payload must not block the ContactCustomEvent itself from being
-    recorded, or stop other mappings for the same event from applying.
+    mapping/payload must not block the CustomEvent itself from being recorded, or
+    stop other mappings for the same event from applying.
     """
     mappings = EventFieldMappingRepository(db).get_mappings_for_event_type(event_type)
     if not mappings:
@@ -103,9 +110,9 @@ def _apply_field_mappings(
 
 def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
     """
-    Process a single CloudEvents-shaped envelope received over NATS: resolve (or
-    auto-create) the Contact identified by the envelope's embedded `user.id`, then
-    record a ContactCustomEvent against it.
+    Process a single CloudEvents-shaped envelope received over NATS: if its
+    event_type is tracked, resolve (or auto-create) the Contact identified by the
+    envelope's embedded `user.id`, then record a CustomEvent against it.
 
     Only event_type, time, event_data, and user are read from the envelope for
     ingestion - the rest (source, spec_version, subject, tags, labels, the
@@ -116,16 +123,20 @@ def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
         msg: The raw event envelope, as received from NATS.
 
     Returns:
-        The created ContactCustomEvent's id as a string, or None if the envelope had
-        no usable user identity.
+        The created CustomEvent's id as a string, or None if event_type isn't
+        tracked or the envelope had no usable user identity.
     """
+    event_type = msg.get("event_type", "")
+    if not TrackedEventTypeRepository(db).get_by_event_type(event_type):
+        logger.debug(f"Dropping untracked event_type {event_type!r}")
+        return None
+
     user = msg.get("user") or {}
     external_id = user.get("id")
     if not external_id:
         logger.error(f"Dropping NATS event with no embedded user.id: {msg}")
         return None
 
-    event_type = msg.get("event_type", "")
     occurred_at = _parse_occurred_at(msg.get("time"))
     event_data = msg.get("event_data")
     if not isinstance(event_data, dict):
@@ -138,7 +149,7 @@ def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
         last_name=user.get("last_name"),
     )
 
-    event = ContactCustomEventRepository(db).create_event(
+    event = CustomEventRepository(db).create_event(
         contact_id=contact.id,
         name=event_type,
         occurred_at=occurred_at,

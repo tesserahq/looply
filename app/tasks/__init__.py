@@ -16,6 +16,7 @@ def _import_tasks():
     """Import tasks for registration."""
     from . import poll_campaign_status  # noqa: F401
     from . import poll_campaign_engagement  # noqa: F401
+    from . import process_nats_event_task  # noqa: F401
 
 
 _import_tasks()

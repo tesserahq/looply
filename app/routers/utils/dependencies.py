@@ -8,10 +8,20 @@ from app.repositories.segment_repository import SegmentRepository
 from app.repositories.custom_field_definition_repository import (
     CustomFieldDefinitionRepository,
 )
+from app.repositories.event_field_mapping_repository import (
+    EventFieldMappingRepository,
+)
+from app.repositories.tracked_event_type_repository import (
+    TrackedEventTypeRepository,
+)
+from app.repositories.custom_event_repository import CustomEventRepository
 from app.models.contact import Contact
 from app.models.campaign import Campaign
 from app.models.segment import Segment
 from app.models.custom_field_definition import CustomFieldDefinition
+from app.models.event_field_mapping import EventFieldMapping
+from app.models.tracked_event_type import TrackedEventType
+from app.models.custom_event import CustomEvent
 
 
 def get_contact_by_id(contact_id: UUID, db: Session = Depends(get_db)) -> Contact:
@@ -139,3 +149,82 @@ def get_custom_field_definition_by_id(
             detail="Custom field definition not found",
         )
     return definition
+
+
+def get_event_field_mapping_by_id(
+    mapping_id: UUID, db: Session = Depends(get_db)
+) -> EventFieldMapping:
+    """
+    Dependency to get an event-to-field mapping by ID.
+    Raises 404 if not found (or soft-deleted).
+
+    Args:
+        mapping_id: The ID of the mapping to retrieve
+        db: Database session
+
+    Returns:
+        EventFieldMapping: The mapping instance
+
+    Raises:
+        HTTPException: 404 if not found
+    """
+    mapping = EventFieldMappingRepository(db).get_mapping(mapping_id)
+    if not mapping:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event field mapping not found",
+        )
+    return mapping
+
+
+def get_tracked_event_type_by_id(
+    tracked_event_type_id: UUID, db: Session = Depends(get_db)
+) -> TrackedEventType:
+    """
+    Dependency to get a tracked event type by ID.
+    Raises 404 if not found (or soft-deleted).
+
+    Args:
+        tracked_event_type_id: The ID of the registration to retrieve
+        db: Database session
+
+    Returns:
+        TrackedEventType: The registration instance
+
+    Raises:
+        HTTPException: 404 if not found
+    """
+    tracked = TrackedEventTypeRepository(db).get_tracked_event_type(
+        tracked_event_type_id
+    )
+    if not tracked:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tracked event type not found",
+        )
+    return tracked
+
+
+def get_custom_event_by_id(
+    event_id: UUID, db: Session = Depends(get_db)
+) -> CustomEvent:
+    """
+    Dependency to get a custom event by ID.
+    Raises 404 if not found.
+
+    Args:
+        event_id: The ID of the event to retrieve
+        db: Database session
+
+    Returns:
+        CustomEvent: The event instance
+
+    Raises:
+        HTTPException: 404 if not found
+    """
+    event = CustomEventRepository(db).get_event(event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Custom event not found"
+        )
+    return event

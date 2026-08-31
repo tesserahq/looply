@@ -64,11 +64,14 @@ class ContactCustomFieldValueRepository:
         contact_id: UUID,
         field_name: str,
         value: Union[str, float, bool],
-        set_by_user_id: UUID,
+        set_by_user_id: Optional[UUID],
     ) -> ContactCustomFieldValue:
         """
         Upsert a contact's value for a named field - one current value per contact
         per field; writing again overwrites, it does not append.
+
+        set_by_user_id is None when this write comes from an EventFieldMapping during
+        NATS event ingestion rather than an authenticated HTTP caller.
 
         Raises:
             UndefinedCustomFieldError: no active definition exists for field_name.

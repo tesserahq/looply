@@ -71,6 +71,23 @@ class Settings(BaseSettings):
         json_schema_extra={"env": "ENGAGEMENT_POLLING_WINDOW_DAYS"},
     )
 
+    # NATS (Custom Events ingestion) - mirrors orcha's settings for consuming the same
+    # shared Linden event stream. See docs/prds/0002-contact-custom-fields-and-events.md,
+    # "Custom Events" -> "Ingestion transport".
+    nats_enabled: bool = Field(default=False, json_schema_extra={"env": "NATS_ENABLED"})
+    nats_url: str = Field(
+        default="nats://localhost:4222", json_schema_extra={"env": "NATS_URL"}
+    )
+    nats_queue: str = Field(
+        default="looply_worker", json_schema_extra={"env": "NATS_QUEUE"}
+    )
+    nats_subjects: str = Field(
+        default="com.>", json_schema_extra={"env": "NATS_SUBJECTS"}
+    )
+    nats_stream_name: str = Field(
+        default="EVT_LINDEN", json_schema_extra={"env": "NATS_STREAM_NAME"}
+    )
+
     @model_validator(mode="before")
     def set_database_url(cls, values):
         """Set the database_url dynamically based on the environment field."""

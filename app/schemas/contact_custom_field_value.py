@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Union
+from typing import Optional, Union
 from uuid import UUID
 from datetime import datetime
 
@@ -22,7 +22,9 @@ class ContactCustomFieldValue(BaseModel):
     """The owning field definition's name, denormalized for display convenience."""
 
     value: Union[str, float, bool]
-    set_by_user_id: UUID
+    set_by_user_id: Optional[UUID] = None
+    """Null if this value was written by an EventFieldMapping during NATS event
+    ingestion rather than an authenticated caller."""
     created_at: datetime
     updated_at: datetime
 
@@ -35,4 +37,4 @@ class ContactCustomFieldValueCreate(BaseModel):
     contact_id: UUID
     field_definition_id: UUID
     value: Union[str, float, bool]
-    set_by_user_id: UUID
+    set_by_user_id: Optional[UUID] = None

@@ -13,6 +13,7 @@ from app.schemas.campaign import CampaignCreate, CampaignUpdate
 from app.schemas.segment_rule import SegmentRuleCreate
 from app.repositories.segment_resolver import resolve_contacts_query
 from app.repositories.soft_delete_repository import SoftDeleteRepository
+from app.repositories.tag_repository import TagRepository
 from app.utils.db.filtering import apply_filters
 
 
@@ -96,10 +97,15 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
         Returns:
             Campaign: The created campaign
         """
-        db_campaign = Campaign(**campaign.model_dump())
+        db_campaign = Campaign(**campaign.model_dump(exclude={"tags"}))
         self.db.add(db_campaign)
         self.db.commit()
         self.db.refresh(db_campaign)
+        if campaign.tags:
+            TagRepository(self.db).set_campaign_tags(
+                db_campaign.id, campaign.tags, campaign.created_by_id
+            )
+            self.db.expire(db_campaign, ["_tags_rel"])
         return db_campaign
 
     def update_campaign(
@@ -118,10 +124,17 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
         db_campaign = self.db.query(Campaign).filter(Campaign.id == campaign_id).first()
         if db_campaign:
             update_data = campaign.model_dump(exclude_unset=True)
+            tags = update_data.pop("tags", None)
             for key, value in update_data.items():
                 setattr(db_campaign, key, value)
             self.db.commit()
+            if tags is not None:
+                TagRepository(self.db).set_campaign_tags(
+                    campaign_id, tags, db_campaign.created_by_id
+                )
             self.db.refresh(db_campaign)
+            if tags is not None:
+                self.db.expire(db_campaign, ["_tags_rel"])
         return db_campaign
 
     def delete_campaign(self, campaign_id: UUID) -> bool:

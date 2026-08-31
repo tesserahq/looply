@@ -15,6 +15,7 @@ from app.repositories.tracked_event_type_repository import (
     TrackedEventTypeRepository,
 )
 from app.repositories.custom_event_repository import CustomEventRepository
+from app.repositories.tag_repository import TagRepository
 from app.models.contact import Contact
 from app.models.campaign import Campaign
 from app.models.segment import Segment
@@ -22,6 +23,7 @@ from app.models.custom_field_definition import CustomFieldDefinition
 from app.models.event_field_mapping import EventFieldMapping
 from app.models.tracked_event_type import TrackedEventType
 from app.models.custom_event import CustomEvent
+from app.models.tag import Tag
 
 
 def get_contact_by_id(contact_id: UUID, db: Session = Depends(get_db)) -> Contact:
@@ -228,3 +230,26 @@ def get_custom_event_by_id(
             status_code=status.HTTP_404_NOT_FOUND, detail="Custom event not found"
         )
     return event
+
+
+def get_tag_by_id(tag_id: UUID, db: Session = Depends(get_db)) -> Tag:
+    """
+    Dependency to get a tag by ID.
+    Raises 404 if not found (or soft-deleted).
+
+    Args:
+        tag_id: The ID of the tag to retrieve
+        db: Database session
+
+    Returns:
+        Tag: The tag instance
+
+    Raises:
+        HTTPException: 404 if not found
+    """
+    tag = TagRepository(db).get_tag(tag_id)
+    if not tag:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found"
+        )
+    return tag

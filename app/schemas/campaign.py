@@ -32,7 +32,9 @@ class CampaignBase(BaseModel):
     """Optional subject override; Sendly uses the template subject when omitted."""
 
     tags: list[str] = []
-    """Optional campaign tags forwarded to Sendly."""
+    """Tag names assigned to this campaign, forwarded to Sendly on send.
+    Auto-created by name if they don't already exist - shares the same Tag
+    entity as contact tags."""
 
     created_by_id: UUID
     """ID of the user who created this campaign."""
@@ -69,7 +71,9 @@ class CampaignCreateRequest(BaseModel):
     """Optional subject override; Sendly uses the template subject when omitted."""
 
     tags: list[str] = []
-    """Optional campaign tags forwarded to Sendly."""
+    """Tag names assigned to this campaign, forwarded to Sendly on send.
+    Auto-created by name if they don't already exist - shares the same Tag
+    entity as contact tags."""
 
 
 class CampaignUpdate(BaseModel):

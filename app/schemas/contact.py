@@ -95,6 +95,10 @@ class ContactBase(BaseModel):
     is_active: bool = True
     """Whether the contact is active. Defaults to True."""
 
+    tags: list[str] = []
+    """Tag names currently assigned to this contact. Auto-created by name on
+    write if they don't already exist (see TagRepository.get_or_create_tags)."""
+
     source: Optional[str] = None
     """Provenance: "manual", "website", "phone", or an event-derived value stamped
     from TrackedEventType.source. Unset for contacts that predate this field."""
@@ -169,6 +173,10 @@ class ContactCreateRequest(BaseModel):
     is_active: bool = True
     """Whether the contact is active. Defaults to True."""
 
+    tags: list[str] = []
+    """Tag names to assign to this contact. Auto-created by name if they
+    don't already exist."""
+
 
 class ContactUpdate(BaseModel):
     """Schema for updating an existing contact. All fields are optional."""
@@ -229,6 +237,10 @@ class ContactUpdate(BaseModel):
 
     is_active: Optional[bool] = None
     """Updated active status."""
+
+    tags: Optional[list[str]] = None
+    """Full replacement for this contact's tag set. Omit to leave tags
+    unchanged; pass [] to clear all tags."""
 
 
 class ContactInDB(ContactBase):

@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.mixins import TimestampMixin, SoftDeleteMixin
 from sqlalchemy import Column, ForeignKey, String, Text, Boolean, Computed
 from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
@@ -78,8 +78,26 @@ class Contact(Base, TimestampMixin, SoftDeleteMixin):
         nullable=False,
     )
 
+    # Read-only: assignment goes through TagRepository.set_contact_tags, not
+    # this relationship, so writes stay atomic with the contact_tags rows.
+    # lazy="selectin" batches this across a paginated list instead of one
+    # query per contact. Soft-deleted Tag rows are excluded automatically by
+    # the global soft-delete query filter (see app.db._add_soft_delete_criteria).
+    _tags_rel = relationship(
+        "Tag",
+        secondary="contact_tags",
+        viewonly=True,
+        lazy="selectin",
+        order_by="Tag.name",
+    )
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+    @property
+    def tags(self) -> list[str]:
+        """Names of this contact's assigned tags, alphabetically."""
+        return [tag.name for tag in self._tags_rel]
 
     @property
     def full_name(self) -> str:

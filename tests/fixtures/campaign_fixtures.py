@@ -1,5 +1,7 @@
 from uuid import uuid4
+
 import pytest
+
 from app.constants.campaign import CampaignStatus
 from app.models.campaign import Campaign
 
@@ -17,7 +19,6 @@ def draft_campaign(db, faker, test_user, test_segment):
         "project_id": uuid4(),
         "template_id": uuid4(),
         "template_variables": {"greeting": "Hello"},
-        "tags": ["newsletter"],
         "created_by_id": test_user.id,
     }
 

@@ -1,0 +1,78 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlalchemy import paginate
+
+from app.db import get_db
+from app.models.tag import Tag as TagModel
+from app.schemas.tag import Tag, TagCreateRequest, TagUpdate
+from app.repositories.tag_repository import TagConflictError, TagRepository
+from app.routers.utils.dependencies import get_tag_by_id
+from app.schemas.user import User
+from tessera_sdk.server.dependencies.auth import get_current_user
+from app.auth.rbac import build_rbac_dependencies
+
+router = APIRouter(
+    prefix="/tags",
+    tags=["tags"],
+    responses={404: {"description": "Not found"}},
+)
+
+RESOURCE = "tag"
+rbac = build_rbac_dependencies(resource=RESOURCE)
+
+
+@router.post("", response_model=Tag, status_code=status.HTTP_201_CREATED)
+def create_tag(
+    tag_data: TagCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["create"]),
+):
+    """Create a new tag."""
+    try:
+        return TagRepository(db).create_tag(tag_data.name, current_user.id)
+    except TagConflictError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+
+
+@router.get("", response_model=Page[Tag])
+def list_tags(
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
+    """List all active tags with pagination."""
+    return paginate(db, TagRepository(db).get_tags_query())
+
+
+@router.get("/{tag_id}", response_model=Tag)
+def get_tag(
+    tag: TagModel = Depends(get_tag_by_id),
+    _authorized: bool = Depends(rbac["read"]),
+):
+    """Get a tag by ID."""
+    return tag
+
+
+@router.put("/{tag_id}", response_model=Tag)
+def update_tag(
+    tag_data: TagUpdate,
+    existing_tag: TagModel = Depends(get_tag_by_id),
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["update"]),
+):
+    """Rename a tag."""
+    try:
+        return TagRepository(db).update_tag(existing_tag.id, tag_data.name)
+    except TagConflictError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+
+
+@router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_tag(
+    existing_tag: TagModel = Depends(get_tag_by_id),
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["delete"]),
+):
+    """Delete a tag, removing it from every contact/campaign it's assigned to."""
+    TagRepository(db).delete_tag(existing_tag.id)

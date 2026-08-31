@@ -16,11 +16,15 @@ from app.models.campaign_recipient import CampaignRecipient
 from app.models.contact import Contact
 from app.models.contact_list import ContactList
 from app.repositories.contact_list_repository import ContactListRepository
+from app.repositories.contact_custom_field_value_repository import (
+    ContactCustomFieldValueRepository,
+)
 from app.repositories.segment_resolver import (
     SegmentResolutionError,
     resolve_contacts_query,
     resolve_count,
     validate_campaign_references,
+    validate_custom_field_references,
 )
 from app.schemas.segment_rule import SegmentRuleCreate
 
@@ -374,3 +378,233 @@ def test_campaign_activity_rejects_non_completed_campaign(
     )
     with pytest.raises(SegmentResolutionError):
         validate_campaign_references(db, root)
+
+
+def test_contact_field_eq(db, faker, test_user):
+    acme = _contact(db, faker, test_user, company="Acme Inc")
+    other = _contact(db, faker, test_user, company="Globex")
+
+    root = _root(
+        {
+            "type": "contact_field",
+            "field": "company",
+            "operator": "==",
+            "value": "Acme Inc",
+        }
+    )
+    resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
+
+    assert acme.id in resolved_ids
+    assert other.id not in resolved_ids
+
+
+def test_contact_field_ilike(db, faker, test_user):
+    acme = _contact(db, faker, test_user, company="Acme Inc")
+    other = _contact(db, faker, test_user, company="Globex")
+
+    root = _root(
+        {
+            "type": "contact_field",
+            "field": "company",
+            "operator": "ilike",
+            "value": "%acme%",
+        }
+    )
+    resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
+
+    assert acme.id in resolved_ids
+    assert other.id not in resolved_ids
+
+
+def test_contact_field_in(db, faker, test_user):
+    acme = _contact(db, faker, test_user, company="Acme Inc")
+    globex = _contact(db, faker, test_user, company="Globex")
+    other = _contact(db, faker, test_user, company="Initech")
+
+    root = _root(
+        {
+            "type": "contact_field",
+            "field": "company",
+            "operator": "in",
+            "value": ["Acme Inc", "Globex"],
+        }
+    )
+    resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
+
+    assert acme.id in resolved_ids
+    assert globex.id in resolved_ids
+    assert other.id not in resolved_ids
+
+
+def test_contact_field_is_active_boolean(db, faker, test_user):
+    active = _contact(db, faker, test_user, is_active=True)
+    inactive = _contact(db, faker, test_user, is_active=False)
+
+    root = _root(
+        {
+            "type": "contact_field",
+            "field": "is_active",
+            "operator": "==",
+            "value": False,
+        }
+    )
+    resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
+
+    assert inactive.id in resolved_ids
+    assert active.id not in resolved_ids
+
+
+def test_contact_field_rejects_disallowed_operator():
+    with pytest.raises(ValueError):
+        _root(
+            {
+                "type": "contact_field",
+                "field": "is_active",
+                "operator": "ilike",
+                "value": "x",
+            }
+        )
+
+
+def test_contact_field_rejects_unknown_contact_type_value():
+    with pytest.raises(ValueError):
+        _root(
+            {
+                "type": "contact_field",
+                "field": "contact_type",
+                "operator": "==",
+                "value": "not_a_real_type",
+            }
+        )
+
+
+def test_custom_field_string_eq(
+    db, faker, test_user, test_contact, test_custom_field_definition
+):
+    ContactCustomFieldValueRepository(db).set_value(
+        contact_id=test_contact.id,
+        field_name=test_custom_field_definition.name,
+        value="hello",
+        set_by_user_id=test_user.id,
+    )
+    unset_contact = _contact(db, faker, test_user)
+
+    root = _root(
+        {
+            "type": "custom_field",
+            "field_name": test_custom_field_definition.name,
+            "operator": "==",
+            "value": "hello",
+        }
+    )
+    resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
+
+    assert test_contact.id in resolved_ids
+    assert unset_contact.id not in resolved_ids
+
+
+def test_custom_field_number_gte(
+    db, faker, test_user, test_contact, test_number_field_definition
+):
+    """The PRD's own motivating "large family" example: family_member_count >= 3."""
+    repository = ContactCustomFieldValueRepository(db)
+    repository.set_value(
+        contact_id=test_contact.id,
+        field_name=test_number_field_definition.name,
+        value=3,
+        set_by_user_id=test_user.id,
+    )
+    below_threshold = _contact(db, faker, test_user)
+    repository.set_value(
+        contact_id=below_threshold.id,
+        field_name=test_number_field_definition.name,
+        value=1,
+        set_by_user_id=test_user.id,
+    )
+
+    root = _root(
+        {
+            "type": "custom_field",
+            "field_name": test_number_field_definition.name,
+            "operator": ">=",
+            "value": 3,
+        }
+    )
+    resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
+
+    assert test_contact.id in resolved_ids
+    assert below_threshold.id not in resolved_ids
+
+
+def test_custom_field_undefined_field_raises(db):
+    root = _root(
+        {
+            "type": "custom_field",
+            "field_name": "does_not_exist",
+            "operator": "==",
+            "value": "x",
+        }
+    )
+    with pytest.raises(SegmentResolutionError):
+        resolve_count(db, root)
+
+
+def test_custom_field_operator_not_allowed_for_value_type_raises(
+    db, test_number_field_definition
+):
+    root = _root(
+        {
+            "type": "custom_field",
+            "field_name": test_number_field_definition.name,
+            "operator": "ilike",
+            "value": "x",
+        }
+    )
+    with pytest.raises(SegmentResolutionError):
+        validate_custom_field_references(db, root)
+
+
+def test_custom_field_and_contact_field_combined(
+    db, faker, test_user, test_contact, test_number_field_definition
+):
+    """ "Company X AND family_member_count >= 3" - user story 6's example."""
+    test_contact.company = "Acme Inc"
+    db.add(test_contact)
+    db.commit()
+    ContactCustomFieldValueRepository(db).set_value(
+        contact_id=test_contact.id,
+        field_name=test_number_field_definition.name,
+        value=5,
+        set_by_user_id=test_user.id,
+    )
+    wrong_company = _contact(db, faker, test_user, company="Globex")
+    ContactCustomFieldValueRepository(db).set_value(
+        contact_id=wrong_company.id,
+        field_name=test_number_field_definition.name,
+        value=5,
+        set_by_user_id=test_user.id,
+    )
+
+    root = _root(
+        {
+            "op": "and",
+            "conditions": [
+                {
+                    "type": "contact_field",
+                    "field": "company",
+                    "operator": "==",
+                    "value": "Acme Inc",
+                },
+                {
+                    "type": "custom_field",
+                    "field_name": test_number_field_definition.name,
+                    "operator": ">=",
+                    "value": 3,
+                },
+            ],
+        }
+    )
+    resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
+
+    assert test_contact.id in resolved_ids
+    assert wrong_company.id not in resolved_ids

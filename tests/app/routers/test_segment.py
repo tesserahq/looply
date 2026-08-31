@@ -52,6 +52,95 @@ def test_create_segment_dangling_campaign_reference_returns_422(
     assert response.status_code == 422
 
 
+def test_create_segment_contact_field(client_test_user: TestClient, faker):
+    payload = {
+        "name": faker.catch_phrase(),
+        "rule": {
+            "root": {
+                "type": "contact_field",
+                "field": "company",
+                "operator": "==",
+                "value": "Acme Inc",
+            }
+        },
+    }
+
+    response = client_test_user.post("/segments", json=payload)
+    assert response.status_code == 201
+    assert response.json()["rule"]["root"]["field"] == "company"
+
+
+def test_create_segment_contact_field_disallowed_operator_returns_422(
+    client_test_user: TestClient, faker
+):
+    payload = {
+        "name": faker.catch_phrase(),
+        "rule": {
+            "root": {
+                "type": "contact_field",
+                "field": "is_active",
+                "operator": "ilike",
+                "value": "x",
+            }
+        },
+    }
+
+    response = client_test_user.post("/segments", json=payload)
+    assert response.status_code == 422
+
+
+def test_create_segment_custom_field_undefined_field_returns_422(
+    client_test_user: TestClient, faker
+):
+    payload = {
+        "name": faker.catch_phrase(),
+        "rule": {
+            "root": {
+                "type": "custom_field",
+                "field_name": "does_not_exist",
+                "operator": "==",
+                "value": "x",
+            }
+        },
+    }
+
+    response = client_test_user.post("/segments", json=payload)
+    assert response.status_code == 422
+
+
+def test_preview_draft_segment_custom_field(
+    client_test_user: TestClient,
+    db,
+    test_contact,
+    test_user,
+    test_custom_field_definition,
+):
+    from app.repositories.contact_custom_field_value_repository import (
+        ContactCustomFieldValueRepository,
+    )
+
+    ContactCustomFieldValueRepository(db).set_value(
+        contact_id=test_contact.id,
+        field_name=test_custom_field_definition.name,
+        value="hello",
+        set_by_user_id=test_user.id,
+    )
+
+    response = client_test_user.post(
+        "/segments/preview",
+        json={
+            "root": {
+                "type": "custom_field",
+                "field_name": test_custom_field_definition.name,
+                "operator": "==",
+                "value": "hello",
+            }
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["contact_count"] == 1
+
+
 def test_create_segment_duplicate_name_returns_409(
     client_test_user: TestClient, faker, test_contact_list, test_segment
 ):

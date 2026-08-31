@@ -10,6 +10,7 @@ from app.repositories.segment_resolver import (
     resolve_contacts_query,
     resolve_count,
     validate_campaign_references,
+    validate_custom_field_references,
 )
 from app.schemas.segment import SegmentCreate, SegmentUpdate
 from app.schemas.segment_rule import RuleNode, SegmentRuleCreate
@@ -39,10 +40,13 @@ class SegmentRepository(SoftDeleteRepository[Segment]):
 
         Raises:
             SegmentResolutionError: a campaign_activity leaf references a
-                campaign that doesn't exist or isn't completed.
+                campaign that doesn't exist or isn't completed, or a
+                custom_field leaf references an undefined field or a
+                mismatched operator.
             SegmentNameConflictError: the name is already taken.
         """
         validate_campaign_references(self.db, segment.rule.root)
+        validate_custom_field_references(self.db, segment.rule.root)
 
         db_segment = Segment(
             name=segment.name,
@@ -68,7 +72,9 @@ class SegmentRepository(SoftDeleteRepository[Segment]):
 
         Raises:
             SegmentResolutionError: a campaign_activity leaf references a
-                campaign that doesn't exist or isn't completed.
+                campaign that doesn't exist or isn't completed, or a
+                custom_field leaf references an undefined field or a
+                mismatched operator.
             SegmentNameConflictError: the new name is already taken.
         """
         db_segment = self.get_segment(segment_id)
@@ -77,6 +83,7 @@ class SegmentRepository(SoftDeleteRepository[Segment]):
 
         if segment.rule is not None:
             validate_campaign_references(self.db, segment.rule.root)
+            validate_custom_field_references(self.db, segment.rule.root)
             db_segment.rule = segment.rule.model_dump(mode="json")
         if segment.name is not None:
             db_segment.name = segment.name

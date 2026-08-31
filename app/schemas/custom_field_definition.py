@@ -35,6 +35,14 @@ class CustomFieldDefinitionCreate(CustomFieldDefinitionCreateRequest):
     created_by_id: Optional[UUID] = None
 
 
+class CustomFieldDefinitionUpdate(BaseModel):
+    """Schema for updating a custom field definition. name and value_type are
+    immutable (see the PRD) and not included here - only label, a display-only
+    field, can be changed after creation."""
+
+    label: Optional[str] = None
+
+
 class CustomFieldDefinition(BaseModel):
     """Schema for a custom field definition returned in API responses."""
 

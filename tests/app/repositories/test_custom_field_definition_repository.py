@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 
 from app.repositories.custom_field_definition_repository import (
@@ -6,6 +8,7 @@ from app.repositories.custom_field_definition_repository import (
 )
 from app.schemas.custom_field_definition import (
     CustomFieldDefinitionCreate,
+    CustomFieldDefinitionUpdate,
     FieldValueType,
 )
 
@@ -97,6 +100,36 @@ def test_soft_deleted_definition_not_returned_by_get_or_list(db, faker, test_use
     assert repository.get_definition(definition.id) is None
     assert repository.get_definition_by_name(definition.name) is None
     assert definition.id not in [d.id for d in repository.get_definitions_query().all()]
+
+
+def test_update_definition_label(db, faker, test_user):
+    repository = CustomFieldDefinitionRepository(db)
+    definition = repository.create_definition(
+        CustomFieldDefinitionCreate(
+            name=faker.unique.slug(),
+            value_type=FieldValueType.STRING,
+            label="Old Label",
+            created_by_id=test_user.id,
+        )
+    )
+
+    updated = repository.update_definition(
+        definition.id, CustomFieldDefinitionUpdate(label="New Label")
+    )
+
+    assert updated is not None
+    assert updated.label == "New Label"
+    assert updated.name == definition.name
+    assert updated.value_type == definition.value_type
+
+
+def test_update_definition_not_found(db):
+    repository = CustomFieldDefinitionRepository(db)
+
+    assert (
+        repository.update_definition(uuid4(), CustomFieldDefinitionUpdate(label="X"))
+        is None
+    )
 
 
 def test_get_definition_by_name_case_insensitive(db, faker, test_user):

@@ -11,12 +11,12 @@ in TrackedEventType is dropped up front - no Contact resolution/auto-create, no
 CustomEvent row, no EventFieldMapping applied - so untracked traffic never causes
 DB writes or junk contacts.
 
-Also applies any EventFieldMapping rows matching the event's type - a host-
-configured way to derive a Custom Field value directly from a field in the event's
-event_data (e.g. "person.created" -> event_data.account.family_member_count ->
-the "family_member_count" field), on top of the PRD's own event/field primitives.
-
-See docs/prds/0002-contact-custom-fields-and-events.md, "Custom Events".
+Contact identity and attribute population are both driven by EventFieldMapping,
+resolved once per event via app.services.event_mapping_resolver - which payload
+path identifies the contact (and whether that's a Contact.external_id or .email
+lookup), and which paths fill in built-in Contact fields vs. custom fields, are
+all operator-configured per event_type rather than hardcoded to a single
+envelope shape. See docs/prds/0003-event-driven-contact-resolution.md.
 """
 
 import logging
@@ -39,11 +39,10 @@ from app.repositories.event_field_mapping_repository import (
 from app.repositories.tracked_event_type_repository import (
     TrackedEventTypeRepository,
 )
+from app.services.event_mapping_resolver import resolve as resolve_event_mappings
 from app.utils.db.db_session_helper import db_session
 
 logger = logging.getLogger(__name__)
-
-_MISSING = object()
 
 
 def _parse_occurred_at(time_value) -> datetime:
@@ -56,67 +55,46 @@ def _parse_occurred_at(time_value) -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _extract_by_path(data: dict, path: str):
-    """Resolve a dot-path (e.g. "account.family_member_count") against a nested
-    dict, returning _MISSING if any segment is absent or an intermediate value
-    isn't a dict."""
-    current = data
-    for segment in path.split("."):
-        if not isinstance(current, dict) or segment not in current:
-            return _MISSING
-        current = current[segment]
-    return current
-
-
-def _apply_field_mappings(
-    db: Session, contact_id, event_type: str, event_data: dict
+def _apply_custom_field_values(
+    db: Session, contact_id, custom_field_values: dict
 ) -> None:
     """
-    Apply every active EventFieldMapping matching event_type: extract the value at
-    each mapping's source_path from event_data and write it to the target custom
-    field. A mapping that doesn't resolve (missing path) or whose extracted value
-    doesn't match the target field's locked value_type is skipped and logged -
+    Write every resolved custom_field mapping value onto the contact. A value that
+    doesn't match its target field's locked value_type is skipped and logged -
     there's no caller on this ingestion path to reject the write back to, so a bad
     mapping/payload must not block the CustomEvent itself from being recorded, or
-    stop other mappings for the same event from applying.
+    stop other values for the same event from applying.
     """
-    mappings = EventFieldMappingRepository(db).get_mappings_for_event_type(event_type)
-    if not mappings:
-        return
-
     field_value_repository = ContactCustomFieldValueRepository(db)
-    for mapping in mappings:
-        value = _extract_by_path(event_data, mapping.source_path)
-        if value is _MISSING:
-            logger.debug(
-                f"EventFieldMapping {mapping.id}: source_path "
-                f"{mapping.source_path!r} not found in event_data, skipping"
-            )
-            continue
-
+    for field_name, value in custom_field_values.items():
         try:
             field_value_repository.set_value(
                 contact_id=contact_id,
-                field_name=mapping.field_name,
+                field_name=field_name,
                 value=value,
                 set_by_user_id=None,
             )
         except (UndefinedCustomFieldError, CustomFieldValueTypeError) as e:
             logger.warning(
-                f"EventFieldMapping {mapping.id} could not be applied "
-                f"(field={mapping.field_name!r}, value={value!r}): {e}"
+                f"Custom field mapping could not be applied "
+                f"(field={field_name!r}, value={value!r}): {e}"
             )
 
 
 def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
     """
     Process a single CloudEvents-shaped envelope received over NATS: if its
-    event_type is tracked, resolve (or auto-create) the Contact identified by the
-    envelope's embedded `user.id`, then record a CustomEvent against it.
+    event_type is tracked, resolve (or auto-create) the Contact identified by
+    that event_type's configured identity-key EventFieldMapping, then record a
+    CustomEvent against it.
 
-    Only event_type, time, event_data, and user are read from the envelope for
-    ingestion - the rest (source, spec_version, subject, tags, labels, the
-    envelope's own id) is stored verbatim in raw_envelope for audit, per the PRD.
+    Only event_type, time, and event_data are read from the envelope for
+    ingestion - the rest (source, spec_version, subject, tags, labels, user,
+    the envelope's own id) is stored verbatim in raw_envelope for audit, per the
+    PRD. Contact identity/attributes come entirely from event_data via
+    EventFieldMapping - there is deliberately no hardcoded envelope field read
+    for identity anymore (see docs/prds/0003-event-driven-contact-resolution.md
+    for why the previous hardcoded top-level `user` read was wrong).
 
     Args:
         db: Database session.
@@ -124,17 +102,13 @@ def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
 
     Returns:
         The created CustomEvent's id as a string, or None if event_type isn't
-        tracked or the envelope had no usable user identity.
+        tracked, has no configured identity-key mapping, or that mapping's
+        source_path didn't resolve for this event.
     """
     event_type = msg.get("event_type", "")
-    if not TrackedEventTypeRepository(db).get_by_event_type(event_type):
+    tracked = TrackedEventTypeRepository(db).get_by_event_type(event_type)
+    if not tracked:
         logger.debug(f"Dropping untracked event_type {event_type!r}")
-        return None
-
-    user = msg.get("user") or {}
-    external_id = user.get("id")
-    if not external_id:
-        logger.error(f"Dropping NATS event with no embedded user.id: {msg}")
         return None
 
     occurred_at = _parse_occurred_at(msg.get("time"))
@@ -142,11 +116,20 @@ def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
     if not isinstance(event_data, dict):
         event_data = {} if event_data is None else {"data": event_data}
 
-    contact = ContactRepository(db).get_or_create_from_event_user(
-        external_id=external_id,
-        email=user.get("email"),
-        first_name=user.get("first_name"),
-        last_name=user.get("last_name"),
+    mappings = EventFieldMappingRepository(db).get_mappings_for_event_type(event_type)
+    resolved = resolve_event_mappings(mappings, event_data)
+    if not resolved.has_identity:
+        logger.error(
+            f"Dropping NATS event: no is_identity_key mapping configured for "
+            f"event_type {event_type!r}, or its source_path didn't resolve: {msg}"
+        )
+        return None
+
+    contact = ContactRepository(db).get_or_create_from_event(
+        identity_field=resolved.identity_field,
+        identity_value=resolved.identity_value,
+        contact_field_values=resolved.contact_field_values,
+        source=tracked.source,
     )
 
     event = CustomEventRepository(db).create_event(
@@ -157,11 +140,11 @@ def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
         raw_envelope=msg,
     )
 
-    _apply_field_mappings(db, contact.id, event_type, event_data)
+    _apply_custom_field_values(db, contact.id, resolved.custom_field_values)
 
     logger.info(
         f"Recorded event {event_type!r} for contact {contact.id} "
-        f"(external_id={external_id})"
+        f"({resolved.identity_field}={resolved.identity_value})"
     )
     return str(event.id)
 

@@ -39,8 +39,13 @@ class Contact(Base, TimestampMixin, SoftDeleteMixin):
     country: Mapped[str | None] = mapped_column(String, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Free-form provenance: "manual", "website", "phone", or an event-derived value
+    # stamped from TrackedEventType.source at auto-create time (see
+    # docs/prds/0003-event-driven-contact-resolution.md). Nullable: existing
+    # contacts predate this column and have unknown provenance.
+    source: Mapped[str | None] = mapped_column(String, nullable=True)
     # Nullable: a contact auto-created from an ingested NATS event (see
-    # app.repositories.contact_repository.get_or_create_from_event_user) has no
+    # app.repositories.contact_repository.get_or_create_from_event) has no
     # authenticated Looply user to attribute it to.
     created_by_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True

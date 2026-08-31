@@ -56,6 +56,7 @@ class TrackedEventTypeRepository(SoftDeleteRepository[TrackedEventType]):
         """
         db_tracked = TrackedEventType(
             event_type=tracked.event_type,
+            source=tracked.source,
             created_by_id=tracked.created_by_id,
         )
         self.db.add(db_tracked)

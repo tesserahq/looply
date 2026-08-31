@@ -95,6 +95,10 @@ class ContactBase(BaseModel):
     is_active: bool = True
     """Whether the contact is active. Defaults to True."""
 
+    source: Optional[str] = None
+    """Provenance: "manual", "website", "phone", or an event-derived value stamped
+    from TrackedEventType.source. Unset for contacts that predate this field."""
+
     created_by_id: UUID
     """ID of the user who created this contact. Required field."""
 
@@ -310,6 +314,9 @@ class ContactDetails(BaseModel):
 
     is_active: bool
     """Whether the contact is active."""
+
+    source: Optional[str] = None
+    """Provenance: "manual", "website", "phone", or an event-derived value."""
 
     created_by_id: UUID
     """ID of the user who created this contact."""

@@ -26,6 +26,11 @@ class TrackedEventType(Base, TimestampMixin, SoftDeleteMixin):
     # Exact match against the envelope's event_type. Unique (active rows only) -
     # see the migration for the partial index.
     event_type: Mapped[str] = mapped_column(String, nullable=False)
+    # Stamped onto Contact.source for every contact auto-created while ingesting
+    # this event_type (see docs/prds/0003-event-driven-contact-resolution.md).
+    # Nullable so existing registrations don't need a value before that PRD ships;
+    # a null source here simply leaves Contact.source unset on auto-create.
+    source: Mapped[str | None] = mapped_column(String, nullable=True)
     # Null for host API calls, set to the operator's user id when created through
     # the UI - mirrors CustomFieldDefinition.created_by_id.
     created_by_id: Mapped[UUID | None] = mapped_column(

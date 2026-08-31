@@ -15,7 +15,7 @@ from tessera_sdk.infra.events.nats_router import NatsEventPublisher
 class CreateContactCommand:
     """
     Command to create a new contact.
-    Validates uniqueness of email and phone, then creates the contact.
+    Validates uniqueness of email, phone, and external_id, then creates the contact.
     """
 
     def __init__(
@@ -59,6 +59,15 @@ class CreateContactCommand:
                 contact_data.phone
             ):
                 raise ValueError("Phone number already registered")
+
+            # Check if external_id already exists
+            if (
+                contact_data.external_id
+                and self.contact_repository.get_contact_by_external_id(
+                    contact_data.external_id
+                )
+            ):
+                raise ValueError("External ID already registered")
 
             # Create contact
             contact_create = ContactCreate(

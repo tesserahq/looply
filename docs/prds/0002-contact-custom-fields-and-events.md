@@ -92,9 +92,11 @@ types; it only adds the two new ones its own design already anticipated a slot f
     independent of any specific host platform's vocabulary, so that plugging Looply into a second
     host platform later requires zero Looply schema or code changes — only that host calling the
     same generic API.
-14. As a developer maintaining Looply, I want field-value writes and event ingestion authenticated
-    through the API-key mechanism that already exists, so that this doesn't introduce a second,
-    parallel auth system to maintain.
+14. As a developer maintaining Looply, I want field-value writes authenticated through the API-key
+    mechanism that already exists, so that this doesn't introduce a second, parallel auth system
+    to maintain for that path. (Event ingestion, ingested over NATS rather than HTTP, has no
+    per-message auth of its own — see "Auth" below for why that's a transport-level trust boundary
+    instead.)
 
 ## Implementation Decisions
 
@@ -123,7 +125,13 @@ types; it only adds the two new ones its own design already anticipated a slot f
   `created_by_id: UUID | None` — null when created by a host API call, set to the operator's user
   id when created through the UI):
   - `name: str`, unique (case-insensitive) across the deployment — single-tenant, so no
-    per-host namespacing is needed (see "Out of Scope").
+    per-host namespacing is needed (see "Out of Scope"). The uniqueness constraint is a **partial
+    unique index on `lower(name)` WHERE `deleted_at IS NULL`**, not a plain column-level
+    constraint — deliberately, since "delete and recreate" is this PRD's own stated fix for a
+    typo'd `name` or wrong `value_type` (see immediately below), and a plain constraint would
+    block exactly that. `Segment.name` (`app/models/segment.py`) has this same gap today
+    (`UniqueConstraint("name", ...)`, not scoped to `deleted_at`) — a pre-existing bug this PRD
+    doesn't fix, but must not repeat.
   - `value_type: FieldValueType` — an enum (`STRING`, `NUMBER`, `BOOLEAN`, `DATE`), **required at
     creation, never inferred from a value**. Immutable once set — changing a field's type after
     values already exist under it would make those values incomparable; a definition must be
@@ -135,28 +143,33 @@ types; it only adds the two new ones its own design already anticipated a slot f
     `custom_field_definitions.id`), unique together — one current value per contact per field
     (writing again overwrites, it does not append; this is current-state data, not a log).
   - `value: JSONB` — the actual value, validated against the field's `value_type` on every write.
-  - `set_by: SetBySource` — a small discriminated value recording provenance: either the calling
-    host's identity (from the API-key principal) or the operator's user id, so "who/what last set
-    this" (user story 4) is always answerable without a separate audit log.
+  - `set_by_user_id: UUID` — simply `request.state.user.id`, whatever Looply's existing
+    `AuthenticationMiddleware` resolved the caller to (API key or JWT alike; both paths already
+    populate `request.state.user` with the same shape). No attempt to distinguish "a host
+    integration" from "an operator" via `service_account` or API-key metadata — that distinction
+    was considered and dropped as unneeded complexity; "who/what last set this" (user story 4) is
+    answered by whichever user id authenticated the write, full stop.
 - **Write endpoint**: setting `/contacts/{external_id}/custom-fields/{field_name}` to a value is a
   single upsert call, usable by both a host (API key) and an operator (Looply UI, same endpoint,
   different caller identity) — collapsing "host writes" and "operator manual correction" into one
   code path rather than two, since the only real difference between them is *who* is calling, which
-  `set_by` already captures.
+  `set_by_user_id` already captures.
   - Writing to an undefined `field_name` is rejected (422) — the definition must exist first
     (created by either an operator or a host, per user stories 1–2). No auto-creation of
     definitions from a bare value write, since that's exactly the inference behavior this PRD
     deliberately rejected.
   - Writing a value that doesn't match the field's locked `value_type` is rejected (422) with a
-    clear message naming the expected type (user story 8).
+    clear message naming the expected type (user story 8). A `DATE` value is a date-only ISO 8601
+    string (e.g. `"2026-08-30"`, no time/timezone component), validated with Python's
+    `date.fromisoformat()`.
 - **Definition CRUD**: create (operator UI or host API, `value_type` required), list, soft-delete
   (cascades to hide that field's values — a deleted definition's data stops appearing in a
   contact's field list and stops being resolvable by segments, without a separate cleanup step).
   Renaming a definition's `name` after creation is out of scope — treated as immutable alongside
   `value_type`, for the same "already-written data references it" reason.
-- **Read endpoints**: list a contact's current custom field values (with each value's `set_by`),
-  and delete a single value (operator correction, user story 5) — distinct from deleting the
-  definition itself (user story 6).
+- **Read endpoints**: list a contact's current custom field values (with each value's
+  `set_by_user_id`), and delete a single value (operator correction, user story 5) — distinct from
+  deleting the definition itself (user story 6).
 
 ### Custom Events
 
@@ -173,36 +186,77 @@ types; it only adds the two new ones its own design already anticipated a slot f
   - `raw_envelope: JSONB` — the full incoming envelope stored verbatim (including `source`,
     `spec_version`, `subject`, `labels`, `tags`), for audit/debugging even though only `name`,
     `occurred_at`, and `properties` are used for segment resolution today (see "Out of Scope").
-- **Ingestion endpoint**: `POST /events`, singular and not nested under `/contacts/{external_id}`,
-  since the contact is identified from the envelope's embedded `user.id`, not from the URL — a
-  path parameter would be redundant with data already in the body. Accepts the CloudEvents-shaped
-  envelope directly (per the "Event ingestion shape" decision below); Looply reads `event_type`,
-  `time`, `event_data`, and `user` and ignores the rest of the envelope for processing purposes
-  (still storing it in `raw_envelope`).
-- **Event ingestion shape**: Looply's contract accepts the envelope close to verbatim rather than
-  requiring the host to pre-translate it into a Looply-specific body. This was a deliberate
-  trade-off: CloudEvents itself is a generic, host-agnostic spec (not a Linden-specific format),
-  and Looply only ever reads a fixed, generic set of top-level fields from it (`event_type`,
-  `time`, `event_data`, `user`) — it never parses or depends on `event_data`'s internal shape,
-  which is genuinely host/event-type-specific and stays opaque. This removes a translation-layer
-  build/maintenance burden on the host side (user story 9) at the cost of Looply's ingestion
-  contract assuming future host platforms also emit a CloudEvents-like envelope; see "Out of
-  Scope" for why this is an accepted, revisitable trade-off rather than a permanent constraint.
+- **Ingestion transport: NATS, not HTTP** — following the exact pattern `orcha`
+  (`~/sites/linden-family/orcha`) already uses to consume the same Linden domain events, rather
+  than a `POST /events` endpoint (an earlier version of this PRD's plan, dropped in favor of this):
+  - A **new, separate long-running process** (`run_nats_worker.py`-equivalent, started by its own
+    `start_nats_worker.sh`-equivalent, alongside — not instead of — the existing API and Celery
+    beat/worker processes) runs a [FastStream](https://faststream.airt.ai/) app with a
+    `faststream.nats.NatsBroker`, subscribed via JetStream to Linden's shared event stream
+    (`orcha`'s `EVT_LINDEN`, config'd via `NATS_STREAM_NAME`) on the wildcard subject `com.>`
+    (`NATS_SUBJECTS`), with a durable, Looply-specific queue group name (`NATS_QUEUE`, e.g.
+    `looply_worker` — analogous to `orcha`'s `orcha_worker`) so Looply gets its own full copy of
+    every message on the stream independent of what `orcha` or any other consumer does with it.
+  - The subscriber handler does the minimum needed to acknowledge quickly: it dispatches the raw
+    message dict to a new Celery task (mirroring `orcha`'s `process_nats_event_task`) via
+    `.delay(msg)`, and all actual envelope parsing, `Contact` upsert, and `ContactCustomEvent`
+    creation happens inside that task — decoupling the NATS ack from DB work, same rationale as
+    `orcha`'s split between `run_nats_worker.py`'s handler and `process_nats_event_task`.
+  - `NatsEventPublisher` (`tessera_sdk.infra.events.nats_router`, already used by Looply today for
+    outbound publishing — e.g. `app/commands/contact/create_contact_command.py`) is
+    publish-only in the currently pinned SDK version; it has no subscriber counterpart. The
+    NATS-subscriber side (`NatsEventSubscriber`, `run_nats_worker.py`) is therefore new code in
+    Looply itself, following `orcha`'s `app/messaging/nats_subscriber.py` shape rather than
+    importing it from the SDK — promoting it into `tessera-sdk` later, once a second service needs
+    the exact same subscriber wrapper, is a reasonable follow-up but not this PRD's job.
+  - This is a materially bigger operational addition than an HTTP endpoint: a third process to
+    deploy/monitor, plus JetStream stream/consumer configuration (`NATS_URL`, `NATS_ENABLED`,
+    `NATS_QUEUE`, `NATS_SUBJECTS`, `NATS_STREAM_NAME`), all new settings for Looply
+    (`app/config.py`) mirroring `orcha`'s.
+  - No `POST /events` HTTP endpoint ships alongside this — NATS is the only ingestion path. A host
+    that cannot speak NATS directly is out of scope for this PRD (see "Out of Scope").
+- **Event ingestion shape**: unchanged from the transport switch — Looply's Celery task still
+  reads the envelope close to verbatim rather than requiring a Looply-specific body, extracting the
+  same fixed, generic set of top-level fields (`event_type`, `time`, `event_data`, `user`) and
+  storing the rest in `raw_envelope`. This was a deliberate trade-off: CloudEvents itself is a
+  generic, host-agnostic spec (not a Linden-specific format), and Looply never parses or depends on
+  `event_data`'s internal shape, which is genuinely host/event-type-specific and stays opaque. This
+  removes a translation-layer build/maintenance burden on the host side (user story 9) at the cost
+  of Looply's ingestion contract assuming future host platforms also emit a CloudEvents-like
+  envelope; see "Out of Scope" for why this is an accepted, revisitable trade-off rather than a
+  permanent constraint.
+  - **Auto-create still applies**: unlike `orcha`'s own event consumer (which only reads a plain
+    `user_id` and tolerates it not resolving, presumably because `orcha`'s own `users` table is
+    kept in sync through some other channel), Looply's task still reads the envelope's embedded
+    `user` object (`id`/`email`/`first_name`/`last_name`) and upserts a `Contact` on an unknown
+    `user.id`, exactly as originally designed (see "Identity: `Contact.external_id`" above and user
+    story 10) — the object is present on the wire regardless of transport; `orcha` simply chooses
+    not to use it. Looply has no equivalent separate contact-sync channel, which is the whole
+    reason auto-create exists here.
 - **Read endpoint**: list a contact's event history (`name`, `occurred_at`, `properties`),
-  optionally filtered by `name`, for the operator UI (user story 11).
+  optionally filtered by `name`, for the operator UI (user story 11) — this stays a normal
+  authenticated HTTP endpoint; only ingestion moves to NATS.
 
 ### Auth
 
-- Both the field-value write endpoint and the event ingestion endpoint sit behind Looply's
-  existing `AuthenticationMiddleware` (already wired into every request, already supports
-  `X-API-Key`/`Bearer ak_...` alongside user JWTs) — no new authentication mechanism. A new RBAC
-  permission (e.g. `custom_data:write`, following `app/auth/rbac.py`'s existing
-  permission-registration pattern) gates the write/ingest endpoints; a `custom_data:read`
-  permission gates the list/browse endpoints operators use.
+- The field-value write endpoint (still HTTP) sits behind Looply's existing
+  `AuthenticationMiddleware` (already wired into every request, already supports
+  `X-API-Key`/`Bearer ak_...` alongside user JWTs) — no new authentication mechanism there. A new
+  RBAC permission (e.g. `custom_data:write`, following `app/auth/rbac.py`'s existing
+  permission-registration pattern) gates it; a `custom_data:read` permission gates the list/browse
+  endpoints operators use (definitions, values, event history).
+- **Event ingestion (NATS) has no per-message authentication at the Looply layer at all** — trust
+  is established once, at the transport level: whatever can publish onto the shared `EVT_LINDEN`
+  JetStream stream in the first place is already trusted, the same boundary `orcha`'s own consumer
+  relies on. There is no per-event API-key/JWT check inside the NATS handler or the Celery task,
+  and no RBAC permission applies to this path — `custom_data:write` only gates the HTTP field-value
+  endpoint. If the NATS stream itself is ever reachable by an untrusted publisher, that's a
+  problem for Linden's NATS deployment/ACLs to solve, not something this PRD's ingestion code
+  can check per-message.
 - No per-contact ownership check is added, because Looply has no tenant/project boundary today
   (`app/auth/rbac.py`'s `global_domain` already documents this) — the only meaningful question for
-  this API is "is the caller allowed to write custom data at all," which the RBAC permission
-  answers.
+  the HTTP field-value write is "is the caller allowed to write custom data at all," which the RBAC
+  permission answers.
 
 ### Segment rule tree integration (forward reference to 0001)
 
@@ -211,8 +265,80 @@ types; it only adds the two new ones its own design already anticipated a slot f
   `list_membership`/`campaign_activity`/`contact_field`:
   - `custom_field` — `{"type": "custom_field", "field_name": str, "operator": ContactFieldOp,
     "value": ...}`, resolved as a join against `ContactCustomFieldValue`/`CustomFieldDefinition`
-    filtered by `field_name`, reusing the same operator enum and value-type-aware comparison logic
-    0001 already defines for its own `contact_field` condition.
+    filtered by `field_name`, reusing `ContactFieldOp` (0001) — including the four comparison
+    operators (`>`/`>=`/`<`/`<=`) added to that shared enum by this PRD (see below).
+
+  **JSONB comparison**: `ContactCustomFieldValue.value` is `JSONB`, storing values of different
+  Python types depending on the field's `value_type` — `apply_filters`'s plain `column > value`
+  (which works for `contact_field`'s ordinary typed SQL columns) does not work directly against a
+  JSONB column holding, say, a number. The `custom_field` resolver therefore does its own cast
+  before applying `apply_filters`'s operator-to-SQL mapping, branching on the looked-up
+  definition's `value_type`:
+  ```python
+  CAST_BY_VALUE_TYPE: dict[FieldValueType, Callable[[ColumnElement], ColumnElement]] = {
+      FieldValueType.STRING: lambda col: col.astext,
+      FieldValueType.NUMBER: lambda col: col.astext.cast(Numeric),
+      FieldValueType.BOOLEAN: lambda col: col.astext.cast(Boolean),
+      FieldValueType.DATE: lambda col: col.astext.cast(Date),
+  }
+  # resolver: cast_value = CAST_BY_VALUE_TYPE[definition.value_type](ContactCustomFieldValue.value)
+  # then apply_filters's OPERATORS[operator](cast_value, condition.value) as usual
+  ```
+  This is resolver-internal — it doesn't change `apply_filters` itself (still used as-is for
+  `contact_field` and everywhere else), and doesn't change the wire contract (a `NUMBER` value is
+  still sent/stored as a JSON number, `DATE` as an ISO date string per the "Custom Fields" section
+  above).
+
+  Unlike `contact_field`, `custom_field.field_name` is a free-form string resolved against a
+  `CustomFieldDefinition` row at request time — `value_type` isn't known until that row is looked
+  up, so operator/value-type compatibility can't be a static Pydantic-only check the way
+  `ALLOWED_OPS_BY_FIELD` is for `contact_field`. Instead:
+
+  - **Lifecycle validation, mirroring `campaign_activity.campaign_id`** (0001's Phase 2): on
+    segment create/update, `custom_field.field_name` must reference an active (non-soft-deleted)
+    `CustomFieldDefinition`, and `operator` must be in that definition's `value_type`'s allowed set
+    below — both checked by a DB lookup, not the Pydantic model alone (422 otherwise). Re-validated
+    at resolution time too (preview and send), so a definition deleted after the segment was saved
+    fails the resolve explicitly instead of silently matching zero/every contact.
+  - **`ALLOWED_OPS_BY_VALUE_TYPE`** — the `custom_field` equivalent of 0001's
+    `ALLOWED_OPS_BY_FIELD`, keyed by `FieldValueType` instead of a fixed field name (since
+    `custom_field`'s "field" is dynamic, this is the one place the allow-list can live):
+    ```python
+    ALLOWED_OPS_BY_VALUE_TYPE: dict[FieldValueType, frozenset[ContactFieldOp]] = {
+        FieldValueType.STRING: frozenset(
+            {ContactFieldOp.EQ, ContactFieldOp.NEQ, ContactFieldOp.ILIKE, ContactFieldOp.IN}
+        ),
+        FieldValueType.NUMBER: frozenset(
+            {
+                ContactFieldOp.EQ,
+                ContactFieldOp.NEQ,
+                ContactFieldOp.GT,
+                ContactFieldOp.GTE,
+                ContactFieldOp.LT,
+                ContactFieldOp.LTE,
+                ContactFieldOp.IN,
+            }
+        ),
+        FieldValueType.BOOLEAN: frozenset({ContactFieldOp.EQ, ContactFieldOp.NEQ}),
+        FieldValueType.DATE: frozenset(
+            {
+                ContactFieldOp.EQ,
+                ContactFieldOp.NEQ,
+                ContactFieldOp.GT,
+                ContactFieldOp.GTE,
+                ContactFieldOp.LT,
+                ContactFieldOp.LTE,
+            }
+        ),
+    }
+    ```
+    This is what makes the PRD's own motivating "large family" example (`family_member_count >=
+    3`, see "Further Notes") expressible — `GTE` didn't exist on `ContactFieldOp` before this PRD;
+    it's added to the shared enum specifically for `NUMBER`/`DATE` custom fields, since none of
+    0001's own `contact_field` columns are ordered/numeric and so grant it via
+    `ALLOWED_OPS_BY_FIELD` (0001's per-field allow-list is unchanged by this addition — it's an
+    explicit allow-list, not `frozenset(ContactFieldOp)`, so a new enum member doesn't silently
+    become available on existing fields).
   - `custom_event` — `{"type": "custom_event", "event_name": str, "op": CustomEventOp}`, where
     `CustomEventOp` is `HAS`/`HAS_NOT` (mirroring `CampaignActivityOp`). Resolved as a join against
     `ContactCustomEvent` filtered by `name`. Per the "custom_event has_not semantics" decision
@@ -236,8 +362,12 @@ same standard 0001 already sets (`tests/app/repositories/test_campaign_repositor
   - A write matching the field's locked type succeeds and overwrites the prior value.
   - A write with a mismatched type is rejected (422) and doesn't create/modify a row.
   - A write to an undefined `field_name` is rejected (422).
-  - `set_by` correctly distinguishes a host (API key) write from an operator (UI) write.
-- **Event ingestion** (task/service, sibling in spirit to 0001's polling-task tests):
+  - `set_by_user_id` is recorded as the authenticated caller's `request.state.user.id`, whether
+    that request came in via API key or JWT.
+  - Re-creating a soft-deleted definition's `name` (after a delete-and-recreate) succeeds; a
+    duplicate `name` while the original is still active is rejected (422/409).
+- **Event ingestion Celery task** (tested directly, called with a plain dict the way `orcha`'s
+  `process_nats_event_task` tests do — no live NATS connection needed):
   - A well-formed envelope for a known `user.id` creates a `ContactCustomEvent` row with correctly
     extracted `name`/`occurred_at`/`properties`, without modifying the existing contact's
     email/name.
@@ -246,11 +376,16 @@ same standard 0001 already sets (`tests/app/repositories/test_campaign_repositor
   - A second event for an already-known `user.id` never overwrites that contact's identity fields,
     even if the envelope's `user.email` differs from what's stored (documents which one wins, since
     contacts can also be edited independently in Looply).
+  - The full `raw_envelope` is stored verbatim regardless of which fields were extracted.
+- **NATS subscriber wiring** (thin, following `orcha`'s `tests/app/messaging/test_nats_subscriber.py`
+  style): a received message is dispatched to the ingestion Celery task via `.delay(msg)` — this
+  layer has no business logic of its own to test beyond "message in, task dispatched."
 - **Repository-level CRUD tests** for `CustomFieldDefinition` (create/list/soft-delete, immutable
   `value_type`), following `tests/app/repositories/test_contact_list_repository.py`'s style.
-- **Router tests** for the write, ingestion, and read/list endpoints, including the RBAC permission
-  checks (`custom_data:write`/`custom_data:read`) and the 404 (unknown `external_id` on a field
-  write)/422 (unknown field, type mismatch) error paths.
+- **Router tests** for the field-value write and read/list endpoints (event ingestion has no
+  router — see above), including the RBAC permission checks (`custom_data:write`/`custom_data:read`)
+  and the 404 (unknown `external_id` on a field write)/422 (unknown field, type mismatch) error
+  paths.
 
 Ask the user which of these modules they want tests written for before implementation begins — as
 with 0001, the type-locking write path is the highest-value module to get right first.
@@ -280,6 +415,10 @@ with 0001, the type-locking write path is the highest-value module to get right 
   level, out of this PRD's scope.
 - **Renaming a field definition's `name` or changing its `value_type` after creation** — both are
   immutable once set; a definition must be deleted and recreated instead.
+- **An HTTP fallback path for event ingestion** — NATS (matching `orcha`'s pattern) is the only
+  ingestion transport this PRD ships. A host that can't or won't publish onto the shared
+  `EVT_LINDEN` JetStream stream directly has no alternative endpoint to call. Revisit if a future
+  host platform needs one.
 - **Committing permanently to the CloudEvents envelope shape as Looply's one-true ingestion
   contract** — accepting it directly (rather than requiring host-side translation first) was a
   deliberate near-term trade-off given Linden's services already emit it. If a future, meaningfully
@@ -295,6 +434,13 @@ with 0001, the type-locking write path is the highest-value module to get right 
   custom-fields/tags system on `Contact`... Adding tags is a separate project"), generalized
   further to cover events too, once the actual shape of Linden's platform events (CloudEvents-like,
   with an embedded `user` object) became clear during design.
+- Event ingestion's NATS transport (worker process, FastStream/`NatsBroker`, JetStream
+  subscription, dispatch-to-Celery-task split) is not a new design — it's `orcha`
+  (`~/sites/linden-family/orcha`)'s existing pattern for consuming this exact same class of Linden
+  domain events, reused here rather than reinvented. See "Custom Events" → "Ingestion transport"
+  above for the concrete mapping from `orcha`'s files (`run_nats_worker.py`,
+  `app/messaging/nats_subscriber.py`, `app/tasks/process_nats_event_task.py`) to Looply's
+  equivalents.
 - The example envelope this design is based on:
   ```json
   {
@@ -316,13 +462,22 @@ with 0001, the type-locking write path is the highest-value module to get right 
     "created_at": "2026-08-29T01:54:07.486493"
   }
   ```
-  Looply's ingestion endpoint only ever reads `event_type`, `time`, `event_data`, and `user` from
-  this — `source`, `spec_version`, `subject`, `tags`, `labels`, and the envelope's own `id` are
-  stored in `raw_envelope` for audit but not otherwise interpreted.
+  Looply's NATS-ingested Celery task only ever reads `event_type`, `time`, `event_data`, and `user`
+  from this — `source`, `spec_version`, `subject`, `tags`, `labels`, and the envelope's own `id`
+  are stored in `raw_envelope` for audit but not otherwise interpreted.
 - The original motivating example — "campaign for users who haven't yet created a family
   member" — is expressible once this ships as a single `custom_event` segment condition:
   `{"type": "custom_event", "event_name": "com.mylinden.person.created", "op": "has_not"}` — no
   `custom_field` needed for that specific case, since a count isn't actually required to express
-  "hasn't happened yet." Fields remain valuable for genuinely value-based conditions (e.g.
-  `family_member_count >= 3` for a "large family" segment), which an event log alone can't express
-  as cleanly.
+  "hasn't happened yet." Fields remain valuable for genuinely value-based conditions, which an
+  event log alone can't express as cleanly — e.g. a "large family" segment:
+  ```json
+  {
+    "type": "custom_field",
+    "field_name": "family_member_count",
+    "operator": ">=",
+    "value": 3
+  }
+  ```
+  using the `GTE` operator this PRD adds to the shared `ContactFieldOp` enum (see "Segment rule
+  tree integration" above) specifically for `NUMBER`/`DATE` custom fields.

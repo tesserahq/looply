@@ -1,4 +1,13 @@
-from . import contact, contact_list, contact_interaction, waiting_list, stats, campaign
+from . import (
+    contact,
+    contact_list,
+    contact_interaction,
+    waiting_list,
+    stats,
+    campaign,
+    segment,
+    custom_field,
+)
 
 __all__ = [
     "contact",
@@ -7,4 +16,6 @@ __all__ = [
     "waiting_list",
     "stats",
     "campaign",
+    "segment",
+    "custom_field",
 ]

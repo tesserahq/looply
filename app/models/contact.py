@@ -39,8 +39,11 @@ class Contact(Base, TimestampMixin, SoftDeleteMixin):
     country: Mapped[str | None] = mapped_column(String, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_by_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    # Nullable: a contact auto-created from an ingested NATS event (see
+    # app.repositories.contact_repository.get_or_create_from_event_user) has no
+    # authenticated Looply user to attribute it to.
+    created_by_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
 
     # Generated full-text search column (maintained by PostgreSQL)

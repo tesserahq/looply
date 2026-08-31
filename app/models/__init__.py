@@ -10,6 +10,8 @@ from app.models.campaign_recipient import CampaignRecipient
 from app.models.segment import Segment
 from app.models.custom_field_definition import CustomFieldDefinition
 from app.models.contact_custom_field_value import ContactCustomFieldValue
+from app.models.contact_custom_event import ContactCustomEvent
+from app.models.event_field_mapping import EventFieldMapping
 
 __all__ = [
     "User",
@@ -24,4 +26,6 @@ __all__ = [
     "Segment",
     "CustomFieldDefinition",
     "ContactCustomFieldValue",
+    "ContactCustomEvent",
+    "EventFieldMapping",
 ]

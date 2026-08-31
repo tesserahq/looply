@@ -42,8 +42,11 @@ class ContactCustomFieldValue(Base, TimestampMixin):
     )
     # The authenticated caller's user id at write time (request.state.user.id) - whether
     # that request came in via API key or JWT. No host-vs-operator distinction (see PRD).
-    set_by_user_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    # Nullable: a value written by an EventFieldMapping during NATS event ingestion has
+    # no authenticated caller - NULL there means "written by event-mapping ingestion",
+    # distinguishable from any real user id in the "who/what last set this" read.
+    set_by_user_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
 
     field_definition = relationship("CustomFieldDefinition", lazy="joined")

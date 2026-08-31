@@ -3,9 +3,27 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.models.event_field_mapping import EventFieldMapping
+from app.models.event_field_mapping import (
+    CONTACT_FIELD_TARGETS,
+    IDENTITY_KEY_TARGETS,
+    EventFieldMapping,
+)
 from app.repositories.soft_delete_repository import SoftDeleteRepository
-from app.schemas.event_field_mapping import EventFieldMappingCreate
+from app.schemas.event_field_mapping import (
+    EventFieldMappingCreate,
+    EventFieldMappingTargetType,
+)
+
+
+class InvalidEventFieldMappingError(ValueError):
+    """Raised when a mapping's target_type/target_field/is_identity_key shape is
+    invalid - e.g. an unrecognized target_field, or is_identity_key targeting a
+    field with no uniqueness guarantee."""
+
+
+class DuplicateIdentityKeyError(ValueError):
+    """Raised when creating a second is_identity_key=True mapping for an
+    event_type that already has one active."""
 
 
 class EventFieldMappingRepository(SoftDeleteRepository[EventFieldMapping]):
@@ -41,11 +59,51 @@ class EventFieldMappingRepository(SoftDeleteRepository[EventFieldMapping]):
         )
 
     def create_mapping(self, mapping: EventFieldMappingCreate) -> EventFieldMapping:
-        """Create a new event-to-field mapping."""
+        """Create a new event-to-field mapping.
+
+        Raises:
+            InvalidEventFieldMappingError: target_field isn't a recognized Contact
+                column, or is_identity_key is set for a target_field with no
+                uniqueness guarantee (only "external_id"/"email" qualify).
+            DuplicateIdentityKeyError: event_type already has an active
+                is_identity_key=True mapping.
+        """
+        if mapping.target_type == EventFieldMappingTargetType.CONTACT_FIELD:
+            if mapping.target_field not in CONTACT_FIELD_TARGETS:
+                raise InvalidEventFieldMappingError(
+                    f"{mapping.target_field!r} is not a recognized Contact field"
+                )
+            if (
+                mapping.is_identity_key
+                and mapping.target_field not in IDENTITY_KEY_TARGETS
+            ):
+                raise InvalidEventFieldMappingError(
+                    "is_identity_key mappings must target one of "
+                    f"{sorted(IDENTITY_KEY_TARGETS)}, got {mapping.target_field!r}"
+                )
+
+        if mapping.is_identity_key:
+            existing = (
+                self.db.query(EventFieldMapping)
+                .filter(
+                    EventFieldMapping.event_type == mapping.event_type,
+                    EventFieldMapping.is_identity_key.is_(True),
+                )
+                .first()
+            )
+            if existing:
+                raise DuplicateIdentityKeyError(
+                    f"Event type {mapping.event_type!r} already has an identity-key "
+                    "mapping"
+                )
+
         db_mapping = EventFieldMapping(
             event_type=mapping.event_type,
             source_path=mapping.source_path,
+            target_type=mapping.target_type.value,
+            target_field=mapping.target_field,
             field_definition_id=mapping.field_definition_id,
+            is_identity_key=mapping.is_identity_key,
             created_by_id=mapping.created_by_id,
         )
         self.db.add(db_mapping)

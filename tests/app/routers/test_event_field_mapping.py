@@ -65,3 +65,78 @@ def test_delete_event_field_mapping(client_test_user, test_event_field_mapping):
 def test_delete_event_field_mapping_not_found(client_test_user):
     response = client_test_user.delete(f"/event-field-mappings/{uuid4()}")
     assert response.status_code == 404
+
+
+def test_create_contact_field_mapping(client_test_user):
+    payload = {
+        "event_type": "com.mylinden.person.updated",
+        "source_path": "person.first_name",
+        "target_type": "contact_field",
+        "target_field": "first_name",
+    }
+
+    response = client_test_user.post("/event-field-mappings", json=payload)
+    assert response.status_code == 201
+
+    data = response.json()
+    assert data["target_type"] == "contact_field"
+    assert data["target_field"] == "first_name"
+    assert data["field_definition_id"] is None
+    assert data["field_name"] is None
+
+
+def test_create_contact_field_mapping_unrecognized_target_field(client_test_user):
+    payload = {
+        "event_type": "com.mylinden.person.updated",
+        "source_path": "person.something",
+        "target_type": "contact_field",
+        "target_field": "not_a_real_column",
+    }
+
+    response = client_test_user.post("/event-field-mappings", json=payload)
+    assert response.status_code == 422
+
+
+def test_create_identity_key_mapping(client_test_user):
+    payload = {
+        "event_type": "com.mylinden.person.updated",
+        "source_path": "person.id",
+        "target_type": "contact_field",
+        "target_field": "external_id",
+        "is_identity_key": True,
+    }
+
+    response = client_test_user.post("/event-field-mappings", json=payload)
+    assert response.status_code == 201
+    assert response.json()["is_identity_key"] is True
+
+
+def test_create_identity_key_mapping_on_non_identity_field_rejected(client_test_user):
+    payload = {
+        "event_type": "com.mylinden.person.updated",
+        "source_path": "person.first_name",
+        "target_type": "contact_field",
+        "target_field": "first_name",
+        "is_identity_key": True,
+    }
+
+    response = client_test_user.post("/event-field-mappings", json=payload)
+    assert response.status_code == 422
+
+
+def test_create_second_identity_key_mapping_for_same_event_type_rejected(
+    client_test_user,
+):
+    payload = {
+        "event_type": "com.mylinden.person.updated",
+        "source_path": "person.id",
+        "target_type": "contact_field",
+        "target_field": "external_id",
+        "is_identity_key": True,
+    }
+    first = client_test_user.post("/event-field-mappings", json=payload)
+    assert first.status_code == 201
+
+    second_payload = {**payload, "source_path": "person.other_id"}
+    response = client_test_user.post("/event-field-mappings", json=second_payload)
+    assert response.status_code == 409

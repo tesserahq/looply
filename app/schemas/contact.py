@@ -99,6 +99,10 @@ class ContactBase(BaseModel):
     """Tag names currently assigned to this contact. Auto-created by name on
     write if they don't already exist (see TagRepository.get_or_create_tags)."""
 
+    source: Optional[str] = None
+    """Provenance: "manual", "website", "phone", or an event-derived value stamped
+    from TrackedEventType.source. Unset for contacts that predate this field."""
+
     created_by_id: UUID
     """ID of the user who created this contact. Required field."""
 
@@ -322,6 +326,9 @@ class ContactDetails(BaseModel):
 
     is_active: bool
     """Whether the contact is active."""
+
+    source: Optional[str] = None
+    """Provenance: "manual", "website", "phone", or an event-derived value."""
 
     created_by_id: UUID
     """ID of the user who created this contact."""

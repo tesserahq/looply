@@ -162,9 +162,9 @@ class TagRepository(SoftDeleteRepository[Tag]):
         """Replace a contact's full tag set with `tag_names` (auto-creating
         any that don't exist yet)."""
         tags = self.get_or_create_tags(tag_names, created_by_id)
-        self.db.query(ContactTag).filter(
-            ContactTag.contact_id == contact_id
-        ).delete(synchronize_session=False)
+        self.db.query(ContactTag).filter(ContactTag.contact_id == contact_id).delete(
+            synchronize_session=False
+        )
         self.db.add_all(
             [ContactTag(contact_id=contact_id, tag_id=tag.id) for tag in tags]
         )

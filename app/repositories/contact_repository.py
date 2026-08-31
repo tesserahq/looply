@@ -103,8 +103,10 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         Returns:
             Query: SQLAlchemy query object for matching contacts
         """
-        return TagRepository(self.db).get_contacts_by_tags_query(tag_names).order_by(
-            Contact.created_at.desc()
+        return (
+            TagRepository(self.db)
+            .get_contacts_by_tags_query(tag_names)
+            .order_by(Contact.created_at.desc())
         )
 
     def get_contacts_by_creator(

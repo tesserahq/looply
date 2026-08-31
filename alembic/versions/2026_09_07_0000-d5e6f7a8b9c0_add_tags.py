@@ -56,9 +56,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["contact_id"], ["contacts.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["tag_id"], ["tags.id"], ondelete="CASCADE"),
-        sa.UniqueConstraint(
-            "contact_id", "tag_id", name="uq_contact_tags_contact_tag"
-        ),
+        sa.UniqueConstraint("contact_id", "tag_id", name="uq_contact_tags_contact_tag"),
     )
 
     op.create_table(

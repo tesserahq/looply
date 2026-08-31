@@ -249,5 +249,7 @@ def get_tag_by_id(tag_id: UUID, db: Session = Depends(get_db)) -> Tag:
     """
     tag = TagRepository(db).get_tag(tag_id)
     if not tag:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found"
+        )
     return tag

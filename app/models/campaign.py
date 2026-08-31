@@ -71,7 +71,10 @@ class Campaign(Base, TimestampMixin, SoftDeleteMixin):
     # Same read-only relationship pattern as Contact._tags_rel - see there for
     # why assignment goes through TagRepository instead.
     _tags_rel = relationship(
-        "Tag", secondary="campaign_tags", viewonly=True, lazy="selectin",
+        "Tag",
+        secondary="campaign_tags",
+        viewonly=True,
+        lazy="selectin",
         order_by="Tag.name",
     )
 

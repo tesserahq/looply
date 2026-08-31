@@ -79,7 +79,10 @@ class Contact(Base, TimestampMixin, SoftDeleteMixin):
     # query per contact. Soft-deleted Tag rows are excluded automatically by
     # the global soft-delete query filter (see app.db._add_soft_delete_criteria).
     _tags_rel = relationship(
-        "Tag", secondary="contact_tags", viewonly=True, lazy="selectin",
+        "Tag",
+        secondary="contact_tags",
+        viewonly=True,
+        lazy="selectin",
         order_by="Tag.name",
     )
 

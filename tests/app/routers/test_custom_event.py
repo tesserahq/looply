@@ -14,9 +14,7 @@ def test_list_custom_events_filter_by_name(client_test_user, test_custom_event):
     ids = [item["id"] for item in response.json()["items"]]
     assert str(test_custom_event.id) in ids
 
-    response = client_test_user.get(
-        "/custom-events", params={"name": "no.such.event"}
-    )
+    response = client_test_user.get("/custom-events", params={"name": "no.such.event"})
     assert response.status_code == 200
     assert response.json()["items"] == []
 
@@ -35,7 +33,9 @@ def test_list_custom_events_filter_by_contact_id(
 def test_list_custom_events_includes_raw_envelope(client_test_user, test_custom_event):
     response = client_test_user.get("/custom-events")
     item = next(
-        item for item in response.json()["items"] if item["id"] == str(test_custom_event.id)
+        item
+        for item in response.json()["items"]
+        if item["id"] == str(test_custom_event.id)
     )
     assert item["raw_envelope"] == test_custom_event.raw_envelope
 
@@ -54,7 +54,9 @@ def test_get_custom_event_not_found(client_test_user):
     assert response.status_code == 404
 
 
-def test_list_contact_custom_events(client_test_user, db, test_contact, test_custom_event):
+def test_list_contact_custom_events(
+    client_test_user, db, test_contact, test_custom_event
+):
     test_contact.external_id = "contact-ext-id"
     db.commit()
 

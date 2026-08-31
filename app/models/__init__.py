@@ -13,6 +13,9 @@ from app.models.contact_custom_field_value import ContactCustomFieldValue
 from app.models.custom_event import CustomEvent
 from app.models.event_field_mapping import EventFieldMapping
 from app.models.tracked_event_type import TrackedEventType
+from app.models.tag import Tag
+from app.models.contact_tag import ContactTag
+from app.models.campaign_tag import CampaignTag
 
 __all__ = [
     "User",
@@ -30,4 +33,7 @@ __all__ = [
     "CustomEvent",
     "EventFieldMapping",
     "TrackedEventType",
+    "Tag",
+    "ContactTag",
+    "CampaignTag",
 ]

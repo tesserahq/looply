@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.mixins import TimestampMixin, SoftDeleteMixin
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -39,7 +39,6 @@ class Campaign(Base, TimestampMixin, SoftDeleteMixin):
     )
     from_email: Mapped[str | None] = mapped_column(String, nullable=True)
     subject: Mapped[str | None] = mapped_column(String, nullable=True)
-    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     batch_id: Mapped[str | None] = mapped_column(String, nullable=True)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -69,5 +68,17 @@ class Campaign(Base, TimestampMixin, SoftDeleteMixin):
         DateTime, nullable=True
     )
 
+    # Same read-only relationship pattern as Contact._tags_rel - see there for
+    # why assignment goes through TagRepository instead.
+    _tags_rel = relationship(
+        "Tag", secondary="campaign_tags", viewonly=True, lazy="selectin",
+        order_by="Tag.name",
+    )
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+    @property
+    def tags(self) -> list[str]:
+        """Names of this campaign's assigned tags, alphabetically."""
+        return [tag.name for tag in self._tags_rel]

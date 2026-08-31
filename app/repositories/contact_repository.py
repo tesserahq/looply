@@ -5,6 +5,7 @@ from sqlalchemy import func
 from app.models.contact import Contact
 from app.schemas.contact import ContactCreate, ContactType, ContactUpdate
 from app.repositories.soft_delete_repository import SoftDeleteRepository
+from app.repositories.tag_repository import TagRepository
 from app.utils.db.filtering import apply_filters
 
 
@@ -91,6 +92,21 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         """
         return self.db.query(Contact).order_by(Contact.created_at.desc())
 
+    def get_contacts_by_tags_query(self, tag_names: List[str]):
+        """
+        Get a query for active contacts having at least one of `tag_names`
+        (case-insensitive, OR semantics), ordered newest-first for pagination.
+
+        Args:
+            tag_names: Tag names to filter by
+
+        Returns:
+            Query: SQLAlchemy query object for matching contacts
+        """
+        return TagRepository(self.db).get_contacts_by_tags_query(tag_names).order_by(
+            Contact.created_at.desc()
+        )
+
     def get_contacts_by_creator(
         self, created_by_id: UUID, skip: int = 0, limit: int = 100
     ) -> List[Contact]:
@@ -142,10 +158,15 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         Returns:
             Contact: The created contact
         """
-        db_contact = Contact(**contact.model_dump())
+        db_contact = Contact(**contact.model_dump(exclude={"tags"}))
         self.db.add(db_contact)
         self.db.commit()
         self.db.refresh(db_contact)
+        if contact.tags:
+            TagRepository(self.db).set_contact_tags(
+                db_contact.id, contact.tags, contact.created_by_id
+            )
+            self.db.expire(db_contact, ["_tags_rel"])
         return db_contact
 
     def get_or_create_from_event_user(
@@ -196,7 +217,9 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         Returns:
             List[Contact]: List of created contacts
         """
-        db_contacts = [Contact(**contact.model_dump()) for contact in contacts]
+        db_contacts = [
+            Contact(**contact.model_dump(exclude={"tags"})) for contact in contacts
+        ]
         self.db.add_all(db_contacts)
         self.db.flush()  # Flush to get IDs assigned
         self.db.commit()
@@ -221,10 +244,17 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         db_contact = self.db.query(Contact).filter(Contact.id == contact_id).first()
         if db_contact:
             update_data = contact.model_dump(exclude_unset=True)
+            tags = update_data.pop("tags", None)
             for key, value in update_data.items():
                 setattr(db_contact, key, value)
             self.db.commit()
+            if tags is not None:
+                TagRepository(self.db).set_contact_tags(
+                    contact_id, tags, db_contact.created_by_id
+                )
             self.db.refresh(db_contact)
+            if tags is not None:
+                self.db.expire(db_contact, ["_tags_rel"])
         return db_contact
 
     def delete_contact(self, contact_id: UUID) -> bool:

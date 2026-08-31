@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from typing import Optional
 from uuid import UUID
 from fastapi_pagination import Page
 from fastapi_pagination import paginate as paginate_sequence
@@ -82,11 +83,19 @@ def batch_create_contacts(
 
 @router.get("", response_model=Page[Contact])
 def list_contacts(
+    tags: Optional[str] = Query(
+        None,
+        description="Comma-separated tag names. Returns contacts having at "
+        "least one of them (OR semantics).",
+    ),
     db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
-    """List all contacts with pagination."""
+    """List all contacts with pagination, optionally filtered by tag."""
     contact_repository = ContactRepository(db)
+    if tags:
+        tag_names = [t.strip() for t in tags.split(",") if t.strip()]
+        return paginate(db, contact_repository.get_contacts_by_tags_query(tag_names))
     return paginate(db, contact_repository.get_contacts_query())
 
 

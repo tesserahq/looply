@@ -44,6 +44,7 @@ pytest_plugins = [
     "tests.fixtures.waiting_list_fixtures",
     "tests.fixtures.campaign_fixtures",
     "tests.fixtures.segment_fixtures",
+    "tests.fixtures.custom_field_fixtures",
 ]
 
 logger = logging.getLogger(__name__)

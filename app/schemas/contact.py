@@ -35,6 +35,10 @@ class ContactBase(BaseModel):
     id: Optional[UUID] = None
     """Unique identifier for the contact. Defaults to None."""
 
+    external_id: Optional[str] = None
+    """Identity in an external host platform (e.g. a Linden account/user id). Unset for
+    contacts created through Looply's own UI/import flow."""
+
     first_name: Optional[str] = None
     """Contact's first name. Optional field."""
 
@@ -104,6 +108,9 @@ class ContactCreate(ContactBase):
 class ContactCreateRequest(BaseModel):
     """Schema for creating a new contact. Inherits all fields from ContactBase."""
 
+    external_id: Optional[str] = None
+    """Identity in an external host platform (e.g. a Linden account/user id)."""
+
     first_name: Optional[str] = None
     """Contact's first name. Optional field."""
 
@@ -161,6 +168,9 @@ class ContactCreateRequest(BaseModel):
 
 class ContactUpdate(BaseModel):
     """Schema for updating an existing contact. All fields are optional."""
+
+    external_id: Optional[str] = None
+    """Updated external host platform identity."""
 
     first_name: Optional[str] = None
     """Updated first name."""
@@ -243,6 +253,9 @@ class ContactDetails(BaseModel):
 
     id: UUID
     """Unique identifier for the contact."""
+
+    external_id: Optional[str] = None
+    """Identity in an external host platform (e.g. a Linden account/user id)."""
 
     first_name: Optional[str] = None
     """Contact's first name."""

@@ -16,7 +16,7 @@ from tessera_sdk.infra.events.nats_router import NatsEventPublisher
 class UpdateContactCommand:
     """
     Command to update an existing contact.
-    Validates uniqueness of email and phone, then updates the contact.
+    Validates uniqueness of email, phone, and external_id, then updates the contact.
     """
 
     def __init__(
@@ -71,6 +71,19 @@ class UpdateContactCommand:
                 )
                 if contact_with_phone and contact_with_phone.id != contact_id:
                     raise ValueError("Phone number already registered")
+
+            # Check if external_id is being updated and already exists
+            if contact_data.external_id:
+                contact_with_external_id = (
+                    self.contact_repository.get_contact_by_external_id(
+                        contact_data.external_id
+                    )
+                )
+                if (
+                    contact_with_external_id
+                    and contact_with_external_id.id != contact_id
+                ):
+                    raise ValueError("External ID already registered")
 
             # Update contact
             updated_contact = self.contact_repository.update_contact(

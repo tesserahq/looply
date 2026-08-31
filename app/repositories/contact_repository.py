@@ -44,6 +44,18 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         """
         return self.db.query(Contact).filter(Contact.email == email).first()
 
+    def get_contact_by_external_id(self, external_id: str) -> Optional[Contact]:
+        """
+        Get a contact by its external host platform identity.
+
+        Args:
+            external_id: The external id of the contact to retrieve
+
+        Returns:
+            Optional[Contact]: The contact or None if not found
+        """
+        return self.db.query(Contact).filter(Contact.external_id == external_id).first()
+
     def get_contact_by_phone(self, phone: str) -> Optional[Contact]:
         """
         Get a contact by phone number.

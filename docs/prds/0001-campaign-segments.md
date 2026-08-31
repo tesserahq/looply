@@ -434,16 +434,33 @@ condition values.
       NEQ = "!="
       ILIKE = "ilike"
       IN = "in"
+      GT = ">"
+      GTE = ">="
+      LT = "<"
+      LTE = "<="
 
-  # Not every operator is meaningful for every field (e.g. `ilike`/`in` on the boolean
-  # is_active column would fail at the SQL layer or produce a nonsense query). Validated in
-  # ContactFieldCondition below, not left to apply_filters' permissive fallback.
+  # GT/GTE/LT/LTE exist on this shared enum for 0002 (Contact Custom Fields and Events)'s
+  # NUMBER/DATE custom_field conditions (e.g. `family_member_count >= 3`) — none of 0001's own
+  # contact_field columns are ordered/numeric, so none of them grant these ops below. Kept as a
+  # single shared enum (rather than a second near-duplicate one) so both PRDs' resolvers reuse
+  # the same apply_filters (`app/utils/db/filtering.py`) comparison logic, which already
+  # supports ">"/"<"/">="/"<=" alongside the operators 0001 originally used.
+  STRING_FIELD_OPS = frozenset(
+      {ContactFieldOp.EQ, ContactFieldOp.NEQ, ContactFieldOp.ILIKE, ContactFieldOp.IN}
+  )
+
+  # Not every operator is meaningful for every field (e.g. `ilike`/`in`/`>` on the boolean
+  # is_active column would fail at the SQL layer or produce a nonsense query). Deliberately an
+  # explicit per-field allow-list, not `frozenset(ContactFieldOp)` — so a future operator added
+  # to the shared enum (like GT/GTE/LT/LTE above) doesn't silently become available on every
+  # existing field just by being added to the enum. Validated in ContactFieldCondition below,
+  # not left to apply_filters' permissive fallback.
   ALLOWED_OPS_BY_FIELD: dict[ContactFieldName, frozenset[ContactFieldOp]] = {
-      ContactFieldName.CONTACT_TYPE: frozenset(ContactFieldOp),
-      ContactFieldName.COMPANY: frozenset(ContactFieldOp),
-      ContactFieldName.CITY: frozenset(ContactFieldOp),
-      ContactFieldName.STATE: frozenset(ContactFieldOp),
-      ContactFieldName.COUNTRY: frozenset(ContactFieldOp),
+      ContactFieldName.CONTACT_TYPE: STRING_FIELD_OPS,
+      ContactFieldName.COMPANY: STRING_FIELD_OPS,
+      ContactFieldName.CITY: STRING_FIELD_OPS,
+      ContactFieldName.STATE: STRING_FIELD_OPS,
+      ContactFieldName.COUNTRY: STRING_FIELD_OPS,
       ContactFieldName.IS_ACTIVE: frozenset({ContactFieldOp.EQ, ContactFieldOp.NEQ}),
   }
 

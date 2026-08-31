@@ -7,6 +7,9 @@ from app.models.waiting_list import WaitingList
 from app.models.waiting_list_member import WaitingListMember
 from app.models.campaign import Campaign
 from app.models.campaign_recipient import CampaignRecipient
+from app.models.segment import Segment
+from app.models.custom_field_definition import CustomFieldDefinition
+from app.models.contact_custom_field_value import ContactCustomFieldValue
 
 __all__ = [
     "User",
@@ -18,4 +21,7 @@ __all__ = [
     "WaitingListMember",
     "Campaign",
     "CampaignRecipient",
+    "Segment",
+    "CustomFieldDefinition",
+    "ContactCustomFieldValue",
 ]

@@ -109,6 +109,27 @@ class TestContactRouter:
         assert response.status_code == 400
         assert "Phone number already registered" in response.json()["detail"]
 
+    def test_create_contact_duplicate_external_id(self, client, faker):
+        """Test POST /contacts with duplicate external_id fails."""
+        external_id = faker.uuid4()
+        contact_data = {
+            "external_id": external_id,
+            "contact_type": "personal",
+            "phone_type": "mobile",
+            "created_by_id": str(client.app.state.test_user.id),
+        }
+        response = client.post("/contacts", json=contact_data)
+        assert response.status_code == 201
+
+        duplicate_data = {
+            **contact_data,
+            "phone": None,
+            "email": None,
+        }
+        response = client.post("/contacts", json=duplicate_data)
+        assert response.status_code == 400
+        assert "External ID already registered" in response.json()["detail"]
+
     def test_list_contacts_pagination(self, client, test_contact, setup_contact):
         """Test GET /contacts with pagination."""
         response = client.get("/contacts")

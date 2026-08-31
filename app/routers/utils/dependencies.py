@@ -34,6 +34,35 @@ def get_contact_by_id(contact_id: UUID, db: Session = Depends(get_db)) -> Contac
     return contact
 
 
+def get_contact_by_external_id(
+    external_id: str, db: Session = Depends(get_db)
+) -> Contact:
+    """
+    Dependency to get a contact by its external host platform identity.
+    Raises 404 if no contact with that external_id exists - field writes don't carry
+    enough contact info (no email/name) to safely auto-create one, unlike event
+    ingestion (see docs/prds/0002-contact-custom-fields-and-events.md).
+
+    Args:
+        external_id: The external id of the contact to retrieve
+        db: Database session
+
+    Returns:
+        Contact: The contact instance
+
+    Raises:
+        HTTPException: 404 if no contact with that external_id exists
+    """
+    contact_repository = ContactRepository(db)
+    contact = contact_repository.get_contact_by_external_id(external_id)
+    if not contact:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No contact with external_id {external_id!r} exists",
+        )
+    return contact
+
+
 def get_campaign_by_id(campaign_id: UUID, db: Session = Depends(get_db)) -> Campaign:
     """
     Dependency to get a campaign by ID.

@@ -15,6 +15,12 @@ class Contact(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "contacts"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Ties this contact to its identity in an external host platform (e.g. a Linden
+    # account/user id). Nullable: contacts created through Looply's own UI/import flow
+    # have no external system to reference. Uniqueness enforced by a partial index
+    # (external_id IS NOT NULL) in the migration, not here - mirrors tessera_sdk's
+    # UserMixin.external_id pattern. See docs/prds/0002-contact-custom-fields-and-events.md.
+    external_id: Mapped[str | None] = mapped_column(String, nullable=True)
     first_name: Mapped[str | None] = mapped_column(String, nullable=True)
     middle_name: Mapped[str | None] = mapped_column(String, nullable=True)
     last_name: Mapped[str | None] = mapped_column(String, nullable=True)

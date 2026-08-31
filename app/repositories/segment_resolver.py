@@ -8,24 +8,82 @@ audience can never independently drift - see
 docs/prds/0001-campaign-segments.md's "Segment repository/resolver" section.
 """
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import Boolean, Date, Numeric, Text, and_, func, or_, select
 from sqlalchemy.orm import Query, Session
 
 from app.constants.campaign import CampaignStatus
 from app.models.campaign import Campaign
 from app.models.campaign_recipient import CampaignRecipient
 from app.models.contact import Contact
+from app.models.contact_custom_field_value import ContactCustomFieldValue
 from app.models.contact_list_member import ContactListMember
+from app.models.custom_field_definition import CustomFieldDefinition
+from app.schemas.custom_field_definition import FieldValueType
 from app.schemas.segment_rule import (
     CampaignActivityCondition,
     CampaignActivityEvent,
     CampaignActivityOp,
+    ContactFieldCondition,
+    ContactFieldOp,
+    CustomFieldCondition,
     ListMembershipCondition,
     ListMembershipOp,
     LogicalOp,
     RuleGroup,
     RuleNode,
 )
+from app.utils.db.filtering import OPERATORS
+
+# custom_field's equivalent of segment_rule.ALLOWED_OPS_BY_FIELD - keyed by
+# FieldValueType instead of a fixed field name, since custom_field's "field"
+# is dynamic (a CustomFieldDefinition row looked up at resolve time), this is
+# the one place the allow-list can live.
+ALLOWED_OPS_BY_VALUE_TYPE: dict[FieldValueType, frozenset[ContactFieldOp]] = {
+    FieldValueType.STRING: frozenset(
+        {ContactFieldOp.EQ, ContactFieldOp.NEQ, ContactFieldOp.ILIKE, ContactFieldOp.IN}
+    ),
+    FieldValueType.NUMBER: frozenset(
+        {
+            ContactFieldOp.EQ,
+            ContactFieldOp.NEQ,
+            ContactFieldOp.GT,
+            ContactFieldOp.GTE,
+            ContactFieldOp.LT,
+            ContactFieldOp.LTE,
+            ContactFieldOp.IN,
+        }
+    ),
+    FieldValueType.BOOLEAN: frozenset({ContactFieldOp.EQ, ContactFieldOp.NEQ}),
+    FieldValueType.DATE: frozenset(
+        {
+            ContactFieldOp.EQ,
+            ContactFieldOp.NEQ,
+            ContactFieldOp.GT,
+            ContactFieldOp.GTE,
+            ContactFieldOp.LT,
+            ContactFieldOp.LTE,
+        }
+    ),
+}
+
+
+# ContactCustomFieldValue.value is JSONB, storing different Python types
+# depending on the definition's value_type - apply_filters'/OPERATORS' plain
+# `column > value` (fine for contact_field's ordinary typed columns) doesn't
+# work directly against a JSONB column. `astext` only applies after a path/key
+# index (col['key'].astext); for a whole-document scalar we extract the text
+# via the `#>>'{}'` operator instead, then cast to the right SQL type per
+# value_type before applying an operator.
+def _as_text(col):
+    return col.op("#>>", return_type=Text)("{}")
+
+
+CAST_BY_VALUE_TYPE = {
+    FieldValueType.STRING: _as_text,
+    FieldValueType.NUMBER: lambda col: _as_text(col).cast(Numeric),
+    FieldValueType.BOOLEAN: lambda col: _as_text(col).cast(Boolean),
+    FieldValueType.DATE: lambda col: _as_text(col).cast(Date),
+}
 
 
 class SegmentResolutionError(ValueError):
@@ -51,6 +109,42 @@ def validate_campaign_references(db: Session, root: RuleNode) -> None:
             validate_campaign_references(db, child)
     elif isinstance(root, CampaignActivityCondition):
         _require_completed_campaign(db, root.campaign_id)
+
+
+def validate_custom_field_references(db: Session, root: RuleNode) -> None:
+    """Walk a rule tree and raise if any custom_field leaf references an
+    undefined field or an operator its value_type doesn't allow.
+
+    Called both at segment create/update time and again at resolution time
+    (via _custom_field_clause), since a definition referenced by an
+    already-saved segment can be soft-deleted afterward.
+    """
+    if isinstance(root, RuleGroup):
+        for child in root.conditions:
+            validate_custom_field_references(db, child)
+    elif isinstance(root, CustomFieldCondition):
+        _require_compatible_custom_field(db, root.field_name, root.operator)
+
+
+def _require_compatible_custom_field(
+    db: Session, field_name: str, operator: ContactFieldOp
+) -> CustomFieldDefinition:
+    definition = (
+        db.query(CustomFieldDefinition)
+        .filter(func.lower(CustomFieldDefinition.name) == field_name.lower())
+        .first()
+    )
+    if definition is None:
+        raise SegmentResolutionError(
+            f"custom_field references field {field_name!r}, which does not exist"
+        )
+    value_type = FieldValueType(definition.value_type)
+    if operator not in ALLOWED_OPS_BY_VALUE_TYPE[value_type]:
+        raise SegmentResolutionError(
+            f"operator {operator} not allowed for custom field {field_name!r} "
+            f"(value_type={value_type.value})"
+        )
+    return definition
 
 
 def _require_completed_campaign(db: Session, campaign_id) -> None:
@@ -98,6 +192,31 @@ def _campaign_activity_clause(db: Session, condition: CampaignActivityCondition)
     return was_sent.where(timestamp_column.is_(None)).exists()
 
 
+def _contact_field_clause(condition: ContactFieldCondition):
+    # field/operator/value-type were already fully validated by
+    # ContactFieldCondition itself (see app.schemas.segment_rule) - no DB
+    # lookup needed, unlike custom_field below.
+    column = getattr(Contact, condition.field.value)
+    op_func = OPERATORS[condition.operator.value]
+    return op_func(column, condition.value)
+
+
+def _custom_field_clause(db: Session, condition: CustomFieldCondition):
+    definition = _require_compatible_custom_field(
+        db, condition.field_name, condition.operator
+    )
+    value_type = FieldValueType(definition.value_type)
+    cast_value_column = CAST_BY_VALUE_TYPE[value_type](ContactCustomFieldValue.value)
+    op_func = OPERATORS[condition.operator.value]
+
+    match_exists = select(ContactCustomFieldValue.id).where(
+        ContactCustomFieldValue.contact_id == Contact.id,
+        ContactCustomFieldValue.field_definition_id == definition.id,
+        op_func(cast_value_column, condition.value),
+    )
+    return match_exists.exists()
+
+
 def _compile(db: Session, node: RuleNode):
     if isinstance(node, RuleGroup):
         clauses = [_compile(db, child) for child in node.conditions]
@@ -106,6 +225,10 @@ def _compile(db: Session, node: RuleNode):
         return _list_membership_clause(node)
     if isinstance(node, CampaignActivityCondition):
         return _campaign_activity_clause(db, node)
+    if isinstance(node, ContactFieldCondition):
+        return _contact_field_clause(node)
+    if isinstance(node, CustomFieldCondition):
+        return _custom_field_clause(db, node)
     raise TypeError(f"Unknown rule node type: {type(node)!r}")  # pragma: no cover
 
 

@@ -46,3 +46,19 @@ class CustomEventRepository:
         if name is not None:
             query = query.filter(CustomEvent.name == name)
         return query.order_by(CustomEvent.occurred_at.desc()).all()
+
+    def get_events_query(
+        self, name: Optional[str] = None, contact_id: Optional[UUID] = None
+    ):
+        """Get a query for all events, most recent first, optionally filtered by
+        name and/or contact_id - for pagination. Global (not contact-scoped) view:
+        confirming NATS ingestion is actually flowing, and discovering what
+        event_types have been seen (e.g. to populate a TrackedEventType or
+        EventFieldMapping picker) both require looking across all contacts, not
+        just one."""
+        query = self.db.query(CustomEvent)
+        if name is not None:
+            query = query.filter(CustomEvent.name == name)
+        if contact_id is not None:
+            query = query.filter(CustomEvent.contact_id == contact_id)
+        return query.order_by(CustomEvent.occurred_at.desc())

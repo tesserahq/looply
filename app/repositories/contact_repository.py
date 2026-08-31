@@ -148,38 +148,45 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         self.db.refresh(db_contact)
         return db_contact
 
-    def get_or_create_from_event_user(
+    def get_or_create_from_event(
         self,
-        external_id: str,
-        email: Optional[str],
-        first_name: Optional[str],
-        last_name: Optional[str],
+        identity_field: str,
+        identity_value: str,
+        contact_field_values: dict,
+        source: Optional[str],
     ) -> Contact:
         """
-        Resolve an ingested NATS event's embedded user to a Contact, auto-creating one
-        from the envelope's user data if this external_id hasn't been seen before.
+        Resolve an ingested NATS event to a Contact via identity_field
+        ("external_id" or "email") and identity_value - the EventFieldMapping
+        flagged is_identity_key for this event's event_type names both (see
+        app.services.event_mapping_resolver and
+        docs/prds/0003-event-driven-contact-resolution.md). Auto-creates one from
+        contact_field_values if this identity hasn't been seen before.
 
-        On a known external_id, identity fields are never overwritten here - only
-        Looply's own contact-edit flows do - so an event can't silently clobber a
-        name/email an operator has since corrected (see the PRD, "Identity" and user
+        On a known identity, contact fields are never overwritten here - only
+        Looply's own contact-edit flows do - so an event can't silently clobber
+        data an operator has since corrected (see 0002's "Identity" and user
         story 10).
 
         A contact created this way has no authenticated Looply user
         (created_by_id=None) and no real phone/contact-type data from the event, so
         those get low-commitment placeholders an operator can correct later.
         """
-        existing = self.get_contact_by_external_id(external_id)
+        existing = (
+            self.get_contact_by_external_id(identity_value)
+            if identity_field == "external_id"
+            else self.get_contact_by_email(identity_value)
+        )
         if existing:
             return existing
 
+        attrs = {**contact_field_values, identity_field: identity_value}
         contact = Contact(
-            external_id=external_id,
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
+            **attrs,
             contact_type=ContactType.LEAD.value,
             phone_type="",
             created_by_id=None,
+            source=source,
         )
         self.db.add(contact)
         self.db.commit()

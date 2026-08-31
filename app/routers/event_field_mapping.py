@@ -10,9 +10,12 @@ from app.schemas.event_field_mapping import (
     EventFieldMapping,
     EventFieldMappingCreate,
     EventFieldMappingCreateRequest,
+    EventFieldMappingTargetType,
 )
 from app.repositories.event_field_mapping_repository import (
+    DuplicateIdentityKeyError,
     EventFieldMappingRepository,
+    InvalidEventFieldMappingError,
 )
 from app.repositories.custom_field_definition_repository import (
     CustomFieldDefinitionRepository,
@@ -41,24 +44,38 @@ def create_event_field_mapping(
 ):
     """Create a new event-to-field mapping - declares that an ingested event of
     event_type should have source_path extracted from its event_data and written
-    onto field_name. Immutable once set; delete and recreate to change it. See
-    docs/prds/0002-contact-custom-fields-and-events.md."""
-    definition = CustomFieldDefinitionRepository(db).get_definition_by_name(
-        mapping_data.field_name
-    )
-    if not definition:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"No custom field definition named {mapping_data.field_name!r} exists",
+    onto either a built-in Contact field or a custom field. Immutable once set;
+    delete and recreate to change it. See
+    docs/prds/0003-event-driven-contact-resolution.md."""
+    field_definition_id = None
+    if mapping_data.target_type == EventFieldMappingTargetType.CUSTOM_FIELD:
+        definition = CustomFieldDefinitionRepository(db).get_definition_by_name(
+            mapping_data.field_name
         )
+        if not definition:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"No custom field definition named {mapping_data.field_name!r} exists",
+            )
+        field_definition_id = definition.id
 
     mapping = EventFieldMappingCreate(
         event_type=mapping_data.event_type,
         source_path=mapping_data.source_path,
-        field_definition_id=definition.id,
+        target_type=mapping_data.target_type,
+        target_field=mapping_data.target_field,
+        field_definition_id=field_definition_id,
+        is_identity_key=mapping_data.is_identity_key,
         created_by_id=current_user.id,
     )
-    return EventFieldMappingRepository(db).create_mapping(mapping)
+    try:
+        return EventFieldMappingRepository(db).create_mapping(mapping)
+    except InvalidEventFieldMappingError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
+        )
+    except DuplicateIdentityKeyError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 @router.get("", response_model=Page[EventFieldMapping])

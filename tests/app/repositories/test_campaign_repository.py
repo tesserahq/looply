@@ -202,39 +202,21 @@ def test_mark_failed(db, draft_campaign):
     assert updated.status == CampaignStatus.FAILED.value
 
 
-def test_get_eligible_recipients_for_segment_filters_and_dedupes(
+def test_get_eligible_recipients_for_segment_filters_inactive(
     db,
     test_contact_list,
     test_segment,
     test_contact,
     inactive_contact,
-    faker,
-    test_user,
 ):
-    from app.models.contact import Contact
-
+    """Contact.email is unique (see
+    docs/prds/0003-event-driven-contact-resolution.md), so two contacts can no
+    longer share an email - get_eligible_recipients_for_segment's DISTINCT ON
+    email is now purely defensive. This only exercises the active-only filter."""
     contact_list_repository = ContactListRepository(db)
     contact_list_repository.add_contact_to_list(test_contact_list.id, test_contact.id)
     contact_list_repository.add_contact_to_list(
         test_contact_list.id, inactive_contact.id
-    )
-
-    # A second, active contact sharing the same email as test_contact -- the
-    # eligible-recipients query must dedupe by email.
-    duplicate_email_contact = Contact(
-        first_name=faker.first_name(),
-        last_name=faker.last_name(),
-        email=test_contact.email,
-        contact_type="business",
-        phone_type="work",
-        is_active=True,
-        created_by_id=test_user.id,
-    )
-    db.add(duplicate_email_contact)
-    db.commit()
-    db.refresh(duplicate_email_contact)
-    contact_list_repository.add_contact_to_list(
-        test_contact_list.id, duplicate_email_contact.id
     )
 
     repository = CampaignRepository(db)

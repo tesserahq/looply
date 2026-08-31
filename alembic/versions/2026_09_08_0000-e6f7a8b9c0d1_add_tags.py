@@ -1,8 +1,8 @@
 """add tags
 
-Revision ID: d5e6f7a8b9c0
-Revises: c4d5e6f7a8b9
-Create Date: 2026-09-07 00:00:00.000000
+Revision ID: e6f7a8b9c0d1
+Revises: d5e6f7a8b9c0
+Create Date: 2026-09-08 00:00:00.000000
 
 Normalized Tag entity shared by contacts and campaigns, replacing campaigns'
 free-form JSONB tags column (no data migration - existing campaign tags are
@@ -18,8 +18,8 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "d5e6f7a8b9c0"
-down_revision: Union[str, None] = "c4d5e6f7a8b9"
+revision: str = "e6f7a8b9c0d1"
+down_revision: Union[str, None] = "d5e6f7a8b9c0"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

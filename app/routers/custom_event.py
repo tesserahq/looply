@@ -8,9 +8,13 @@ from fastapi_pagination.ext.sqlalchemy import paginate
 
 from app.db import get_db
 from app.models.contact import Contact
+from app.models.custom_event import CustomEvent as CustomEventModel
 from app.schemas.custom_event import CustomEvent
 from app.repositories.custom_event_repository import CustomEventRepository
-from app.routers.utils.dependencies import get_contact_by_external_id
+from app.routers.utils.dependencies import (
+    get_contact_by_external_id,
+    get_custom_event_by_id,
+)
 from app.auth.rbac import build_rbac_dependencies
 
 router = APIRouter(
@@ -47,6 +51,16 @@ def list_custom_events(
     return paginate(
         db, CustomEventRepository(db).get_events_query(name=name, contact_id=contact_id)
     )
+
+
+@router.get("/{event_id}", response_model=CustomEvent)
+def get_custom_event(
+    event: CustomEventModel = Depends(get_custom_event_by_id),
+    _authorized: bool = Depends(rbac["read"]),
+):
+    """Get a single custom event by ID - the detail view backing the operator's
+    ability to verify exactly what arrived on the wire for one occurrence."""
+    return event
 
 
 @nested_router.get("", response_model=list[CustomEvent])

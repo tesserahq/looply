@@ -40,6 +40,20 @@ def test_list_custom_events_includes_raw_envelope(client_test_user, test_custom_
     assert item["raw_envelope"] == test_custom_event.raw_envelope
 
 
+def test_get_custom_event(client_test_user, test_custom_event):
+    response = client_test_user.get(f"/custom-events/{test_custom_event.id}")
+    assert response.status_code == 200
+    assert response.json()["id"] == str(test_custom_event.id)
+    assert response.json()["raw_envelope"] == test_custom_event.raw_envelope
+
+
+def test_get_custom_event_not_found(client_test_user):
+    from uuid import uuid4
+
+    response = client_test_user.get(f"/custom-events/{uuid4()}")
+    assert response.status_code == 404
+
+
 def test_list_contact_custom_events(client_test_user, db, test_contact, test_custom_event):
     test_contact.external_id = "contact-ext-id"
     db.commit()

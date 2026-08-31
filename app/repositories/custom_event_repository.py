@@ -37,6 +37,10 @@ class CustomEventRepository:
         self.db.refresh(event)
         return event
 
+    def get_event(self, event_id: UUID) -> Optional[CustomEvent]:
+        """Get a single event by ID."""
+        return self.db.query(CustomEvent).filter(CustomEvent.id == event_id).first()
+
     def list_events_for_contact(
         self, contact_id: UUID, name: Optional[str] = None
     ) -> List[CustomEvent]:

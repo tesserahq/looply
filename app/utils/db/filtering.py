@@ -42,7 +42,7 @@ def apply_filters(query: Query, model: Any, filters: Dict[str, Any]) -> Query:
         filters = {
             "name": {"operator": "ilike", "value": "%john%"},
             "email": {"operator": "!=", "value": "spam@example.com"},
-            "is_active": True,
+            "status": "active",
             "role": {"operator": "in", "value": ["admin", "user"]}
         }
 

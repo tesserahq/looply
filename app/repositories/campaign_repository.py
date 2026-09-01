@@ -10,6 +10,7 @@ from app.models.contact import Contact
 from app.models.segment import Segment
 from app.constants.campaign import CampaignStatus
 from app.schemas.campaign import CampaignCreate, CampaignUpdate
+from app.schemas.contact import ContactStatus
 from app.schemas.segment_rule import SegmentRuleCreate
 from app.repositories.segment_resolver import resolve_contacts_query
 from app.repositories.soft_delete_repository import SoftDeleteRepository
@@ -193,7 +194,7 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
         root = SegmentRuleCreate.model_validate(segment.rule).root
         return (
             resolve_contacts_query(self.db, root)
-            .filter(Contact.is_active.is_(True))
+            .filter(Contact.status == ContactStatus.ACTIVE.value)
             .filter(Contact.email.isnot(None))
             .filter(Contact.email != "")
             .distinct(Contact.email)

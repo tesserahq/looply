@@ -79,6 +79,32 @@ def test_get_by_event_type_not_registered(db):
     assert EventMappingRepository(db).get_by_event_type("no.such.type") is None
 
 
+def test_create_event_mapping_with_default_status_and_tags(db, test_user):
+    repository = EventMappingRepository(db)
+    event_mapping = repository.create_event_mapping(
+        EventMappingCreate(
+            event_type="com.mylinden.person.created",
+            default_status="pending",
+            default_tags=["lead", "linden"],
+            created_by_id=test_user.id,
+        )
+    )
+
+    assert event_mapping.default_status == "pending"
+    assert event_mapping.default_tags == ["lead", "linden"]
+
+
+def test_update_event_mapping_default_status_and_tags(db, test_event_mapping):
+    repository = EventMappingRepository(db)
+    updated = repository.update_event_mapping(
+        test_event_mapping.id,
+        EventMappingUpdateRequest(default_status="inactive", default_tags=["vip"]),
+    )
+
+    assert updated.default_status == "inactive"
+    assert updated.default_tags == ["vip"]
+
+
 def test_update_event_mapping_identity(db, test_event_mapping):
     repository = EventMappingRepository(db)
     updated = repository.update_event_mapping(

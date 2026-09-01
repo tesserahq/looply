@@ -23,7 +23,7 @@ def sample_contact_data(faker, test_user):
         "zip_code": faker.zipcode(),
         "country": faker.country(),
         "notes": faker.text(max_nb_chars=200),
-        "is_active": True,
+        "status": "active",
         "created_by_id": test_user.id,
     }
 
@@ -59,7 +59,7 @@ def test_create_contact(db, sample_contact_data):
     assert contact.zip_code == sample_contact_data["zip_code"]
     assert contact.country == sample_contact_data["country"]
     assert contact.notes == sample_contact_data["notes"]
-    assert contact.is_active == sample_contact_data["is_active"]
+    assert contact.status == sample_contact_data["status"]
     assert contact.created_by_id == sample_contact_data["created_by_id"]
     assert contact.created_at is not None
     assert contact.updated_at is not None
@@ -77,7 +77,7 @@ def test_create_contact_minimal_data(db, minimal_contact_data):
     assert contact.contact_type == minimal_contact_data["contact_type"]
     assert contact.phone_type == minimal_contact_data["phone_type"]
     assert contact.created_by_id == minimal_contact_data["created_by_id"]
-    assert contact.is_active is True  # Default value
+    assert contact.status == "active"  # Default value
     assert contact.created_at is not None
     assert contact.updated_at is not None
 
@@ -140,7 +140,7 @@ def test_get_active_contacts(db, test_contact, inactive_contact):
     assert len(active_contacts) >= 1
     assert any(c.id == test_contact.id for c in active_contacts)
     assert not any(c.id == inactive_contact.id for c in active_contacts)
-    assert all(c.is_active is True for c in active_contacts)
+    assert all(c.status == "active" for c in active_contacts)
 
 
 def test_update_contact(db, test_contact):
@@ -270,30 +270,63 @@ def test_search_contacts_by_contact_type(db, test_contact):
     assert any(contact.id == test_contact.id for contact in results)
 
 
-def test_toggle_contact_active_status(db, test_contact):
-    """Test toggling contact active status."""
+def test_get_or_create_from_event_applies_default_status_and_tags_on_create(db, faker):
+    """A new contact auto-created from an event gets the EventMapping's
+    default_status/default_tags stamped on it."""
     contact_repository = ContactRepository(db)
-    original_status = test_contact.is_active
+    email = faker.email()
 
-    # Toggle status
-    updated_contact = contact_repository.toggle_contact_active_status(test_contact.id)
+    contact = contact_repository.get_or_create_from_event(
+        identity_field="email",
+        identity_value=email,
+        contact_field_values={},
+        source="linden",
+        default_status="pending",
+        default_tags=["lead", "linden"],
+    )
 
-    # Assertions
-    assert updated_contact is not None
-    assert updated_contact.is_active != original_status
-    assert updated_contact.id == test_contact.id
+    assert contact.status == "pending"
+    assert sorted(contact.tags) == ["lead", "linden"]
 
 
-def test_toggle_contact_active_status_not_found(db):
-    """Test toggling contact active status for non-existent contact."""
+def test_get_or_create_from_event_no_default_status_uses_column_default(db, faker):
+    """No default_status configured on the mapping falls back to Contact.status's
+    own default (active), same as manual creation."""
     contact_repository = ContactRepository(db)
-    non_existent_id = uuid4()
 
-    # Toggle status
-    updated_contact = contact_repository.toggle_contact_active_status(non_existent_id)
+    contact = contact_repository.get_or_create_from_event(
+        identity_field="email",
+        identity_value=faker.email(),
+        contact_field_values={},
+        source=None,
+        default_status=None,
+        default_tags=None,
+    )
 
-    # Assertions
-    assert updated_contact is None
+    assert contact.status == "active"
+    assert contact.tags == []
+
+
+def test_get_or_create_from_event_does_not_clobber_existing_contact(db, test_contact):
+    """A matching identity that resolves to an already-existing contact must
+    not have its status/tags overwritten by the mapping's defaults - only
+    newly created contacts get them (no-clobber guarantee)."""
+    contact_repository = ContactRepository(db)
+    original_status = test_contact.status
+    original_tags = list(test_contact.tags)
+
+    resolved = contact_repository.get_or_create_from_event(
+        identity_field="email",
+        identity_value=test_contact.email,
+        contact_field_values={},
+        source="linden",
+        default_status="inactive",
+        default_tags=["should-not-apply"],
+    )
+
+    assert resolved.id == test_contact.id
+    assert resolved.status == original_status
+    assert resolved.tags == original_tags
 
 
 def test_contact_full_name_property(db, test_contact):

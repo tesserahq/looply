@@ -29,6 +29,18 @@ CONTACT_TYPE_OPTIONS: list[ContactTypeOption] = [
 ]
 
 
+class ContactStatus(str, Enum):
+    """Lifecycle status of a contact. Replaces the old boolean is_active
+    column. Only ACTIVE contacts are campaign-send-eligible (see
+    app.repositories.campaign_repository). Not to be confused with the
+    `state` field (US mailing-address state/province). See
+    docs/prds/0005-contact-status-and-event-mapping-defaults.md."""
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    PENDING = "pending"
+
+
 class ContactBase(BaseModel):
     """Base contact model containing common contact attributes."""
 
@@ -92,8 +104,8 @@ class ContactBase(BaseModel):
     notes: Optional[str] = None
     """Additional notes about the contact. Optional field."""
 
-    is_active: bool = True
-    """Whether the contact is active. Defaults to True."""
+    status: ContactStatus = ContactStatus.ACTIVE
+    """Lifecycle status. Defaults to active."""
 
     tags: list[str] = []
     """Tag names currently assigned to this contact. Auto-created by name on
@@ -170,8 +182,8 @@ class ContactCreateRequest(BaseModel):
     notes: Optional[str] = None
     """Additional notes about the contact. Optional field."""
 
-    is_active: bool = True
-    """Whether the contact is active. Defaults to True."""
+    status: ContactStatus = ContactStatus.ACTIVE
+    """Lifecycle status. Defaults to active."""
 
     tags: list[str] = []
     """Tag names to assign to this contact. Auto-created by name if they
@@ -235,8 +247,8 @@ class ContactUpdate(BaseModel):
     notes: Optional[str] = None
     """Updated notes."""
 
-    is_active: Optional[bool] = None
-    """Updated active status."""
+    status: Optional[ContactStatus] = None
+    """Updated lifecycle status."""
 
     tags: Optional[list[str]] = None
     """Full replacement for this contact's tag set. Omit to leave tags
@@ -324,8 +336,8 @@ class ContactDetails(BaseModel):
     notes: Optional[str] = None
     """Additional notes about the contact."""
 
-    is_active: bool
-    """Whether the contact is active."""
+    status: str
+    """Lifecycle status: active, inactive, or pending."""
 
     source: Optional[str] = None
     """Provenance: "manual", "website", "phone", or an event-derived value."""

@@ -21,7 +21,7 @@ def test_contact(db, faker, test_user):
         "zip_code": faker.zipcode(),
         "country": faker.country(),
         "notes": faker.text(max_nb_chars=200),
-        "is_active": True,
+        "status": "active",
         "created_by_id": test_user.id,
     }
 
@@ -52,7 +52,7 @@ def setup_contact(db, faker, setup_user):
         "zip_code": faker.zipcode(),
         "country": faker.country(),
         "notes": faker.text(max_nb_chars=200),
-        "is_active": True,
+        "status": "active",
         "created_by_id": setup_user.id,
     }
 
@@ -83,7 +83,7 @@ def setup_another_contact(db, faker, setup_another_user):
         "zip_code": faker.zipcode(),
         "country": faker.country(),
         "notes": faker.text(max_nb_chars=200),
-        "is_active": True,
+        "status": "active",
         "created_by_id": setup_another_user.id,
     }
 
@@ -114,7 +114,7 @@ def inactive_contact(db, faker, test_user):
         "zip_code": faker.zipcode(),
         "country": faker.country(),
         "notes": faker.text(max_nb_chars=200),
-        "is_active": False,
+        "status": "inactive",
         "created_by_id": test_user.id,
     }
 

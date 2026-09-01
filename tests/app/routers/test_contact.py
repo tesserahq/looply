@@ -41,7 +41,7 @@ class TestContactRouter:
             "zip_code": faker.zipcode(),
             "country": faker.country(),
             "notes": faker.text(max_nb_chars=200),
-            "is_active": True,
+            "status": "active",
             "created_by_id": str(client.app.state.test_user.id),
         }
 

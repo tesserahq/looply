@@ -227,6 +227,41 @@ def test_get_eligible_recipients_for_segment_filters_inactive(
     assert inactive_contact.email not in emails
 
 
+def test_get_eligible_recipients_for_segment_excludes_pending(
+    db, test_contact_list, test_segment, test_contact, test_user, faker
+):
+    """Only status=active is send-eligible - pending (e.g. a contact just
+    auto-created from an event, not yet promoted) must be excluded too, not
+    just inactive."""
+    from app.models.contact import Contact
+
+    pending_contact = Contact(
+        first_name=faker.first_name(),
+        last_name=faker.last_name(),
+        email=faker.unique.email(),
+        contact_type="business",
+        phone_type="work",
+        status="pending",
+        created_by_id=test_user.id,
+    )
+    db.add(pending_contact)
+    db.commit()
+    db.refresh(pending_contact)
+
+    contact_list_repository = ContactListRepository(db)
+    contact_list_repository.add_contact_to_list(test_contact_list.id, test_contact.id)
+    contact_list_repository.add_contact_to_list(
+        test_contact_list.id, pending_contact.id
+    )
+
+    repository = CampaignRepository(db)
+    recipients = repository.get_eligible_recipients_for_segment(test_segment)
+
+    emails = [contact.email for contact in recipients]
+    assert test_contact.email in emails
+    assert pending_contact.email not in emails
+
+
 def test_get_eligible_recipients_for_segment_excludes_no_email(
     db, test_contact_list, test_segment, test_user, faker
 ):
@@ -239,7 +274,7 @@ def test_get_eligible_recipients_for_segment_excludes_no_email(
         email=None,
         contact_type="business",
         phone_type="work",
-        is_active=True,
+        status="active",
         created_by_id=test_user.id,
     )
     db.add(no_email_contact)

@@ -3,6 +3,8 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
+from app.schemas.contact import ContactStatus
+
 
 class EventMappingCreateRequest(BaseModel):
     """Schema for registering a new event_type to act on."""
@@ -28,6 +30,17 @@ class EventMappingCreateRequest(BaseModel):
     Contact identified by identity_target_field. Required together with
     identity_target_field, or omitted together with it."""
 
+    default_status: Optional[ContactStatus] = None
+    """Stamped onto Contact.status for every contact auto-created while
+    ingesting this event_type. Applied only at creation, never on a contact
+    that already exists for this identity. Optional - null leaves
+    Contact.status at its own default (active)."""
+
+    default_tags: Optional[list[str]] = None
+    """Tag names stamped onto every contact auto-created while ingesting this
+    event_type (auto-created by name if they don't already exist). Applied
+    only at creation, same as default_status."""
+
     @model_validator(mode="after")
     def _validate_identity_shape(self) -> "EventMappingCreateRequest":
         if bool(self.identity_target_field) != bool(self.identity_source_path):
@@ -44,6 +57,8 @@ class EventMappingUpdateRequest(BaseModel):
     source: Optional[str] = None
     identity_target_field: Optional[str] = None
     identity_source_path: Optional[str] = None
+    default_status: Optional[ContactStatus] = None
+    default_tags: Optional[list[str]] = None
 
     @model_validator(mode="after")
     def _validate_identity_shape(self) -> "EventMappingUpdateRequest":
@@ -62,6 +77,8 @@ class EventMappingCreate(BaseModel):
     source: Optional[str] = None
     identity_target_field: Optional[str] = None
     identity_source_path: Optional[str] = None
+    default_status: Optional[ContactStatus] = None
+    default_tags: Optional[list[str]] = None
     created_by_id: Optional[UUID] = None
 
 
@@ -73,6 +90,8 @@ class EventMapping(BaseModel):
     source: Optional[str] = None
     identity_target_field: Optional[str] = None
     identity_source_path: Optional[str] = None
+    default_status: Optional[str] = None
+    default_tags: Optional[list[str]] = None
     created_by_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime

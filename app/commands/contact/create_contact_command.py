@@ -71,9 +71,9 @@ class CreateContactCommand:
 
             # Create contact
             contact_create = ContactCreate(
-                **contact_data.model_dump(),
+                **contact_data.model_dump(exclude={"source"}),
                 created_by_id=created_by_id,
-                source="manual",
+                source=contact_data.source or "manual",
             )
 
             contact = self.contact_repository.create_contact(contact_create)

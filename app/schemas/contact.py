@@ -203,6 +203,10 @@ class ContactCreateRequest(BaseModel):
     """Tag names to assign to this contact. Auto-created by name if they
     don't already exist."""
 
+    source: Optional[str] = None
+    """Provenance: "manual", "website", "phone", or a custom value. Defaults to
+    "manual" when omitted (see CreateContactCommand)."""
+
 
 class ContactUpdate(BaseModel):
     """Schema for updating an existing contact. All fields are optional."""
@@ -267,6 +271,9 @@ class ContactUpdate(BaseModel):
     tags: Optional[list[str]] = None
     """Full replacement for this contact's tag set. Omit to leave tags
     unchanged; pass [] to clear all tags."""
+
+    source: Optional[str] = None
+    """Updated provenance value."""
 
 
 class ContactInDB(ContactBase):

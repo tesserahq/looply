@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from app.constants.campaign import CampaignStatus
+from app.models.campaign_recipient import CampaignRecipient
+from app.models.contact import Contact
 from app.repositories.campaign_repository import CampaignRepository
 from app.repositories.contact_list_repository import ContactListRepository
 from app.schemas.campaign import CampaignCreate, CampaignUpdate
@@ -288,3 +290,113 @@ def test_get_eligible_recipients_for_segment_excludes_no_email(
     recipients = repository.get_eligible_recipients_for_segment(test_segment)
 
     assert no_email_contact.id not in [c.id for c in recipients]
+
+
+def _make_contact(db, faker, test_user):
+    contact = Contact(
+        first_name=faker.first_name(),
+        last_name=faker.last_name(),
+        email=faker.email(),
+        contact_type="business",
+        phone_type="work",
+        status="active",
+        created_by_id=test_user.id,
+    )
+    db.add(contact)
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+def test_get_recipient_count(db, draft_campaign, faker, test_user):
+    repository = CampaignRepository(db)
+    assert repository.get_recipient_count(draft_campaign.id) == 0
+
+    contacts = [_make_contact(db, faker, test_user) for _ in range(3)]
+    repository.mark_sending(
+        draft_campaign.id, "batch-1", recipient_contact_ids=[c.id for c in contacts]
+    )
+
+    assert repository.get_recipient_count(draft_campaign.id) == 3
+
+
+def test_get_campaign_stats_computes_rates(db, draft_campaign, faker, test_user):
+    repository = CampaignRepository(db)
+    contacts = [_make_contact(db, faker, test_user) for _ in range(4)]
+    repository.mark_sending(
+        draft_campaign.id, "batch-1", recipient_contact_ids=[c.id for c in contacts]
+    )
+    repository.update_campaign_engagement_counts(
+        draft_campaign.id,
+        delivered_count=4,
+        bounced_count=0,
+        complained_count=1,
+        opened_count=2,
+        clicked_count=1,
+        synced_at=datetime.now(timezone.utc),
+    )
+    db.commit()
+    campaign = repository.get_campaign(draft_campaign.id)
+
+    stats = repository.get_campaign_stats(campaign)
+
+    assert stats.recipient_count == 4
+    assert stats.delivery_rate == 1.0
+    assert stats.bounce_rate == 0.0
+    assert stats.open_rate == 0.5
+    assert stats.click_rate == 0.25
+    assert stats.click_to_open_rate == 0.5
+    assert stats.complaint_rate == 0.25
+
+
+def test_get_campaign_stats_zero_recipients_no_division_error(db, draft_campaign):
+    repository = CampaignRepository(db)
+    campaign = repository.get_campaign(draft_campaign.id)
+
+    stats = repository.get_campaign_stats(campaign)
+
+    assert stats.recipient_count == 0
+    assert stats.delivery_rate == 0.0
+    assert stats.open_rate == 0.0
+    assert stats.click_to_open_rate == 0.0
+
+
+def test_get_engagement_timeline_buckets_by_elapsed_time(
+    db, draft_campaign, faker, test_user
+):
+    repository = CampaignRepository(db)
+    contacts = [_make_contact(db, faker, test_user) for _ in range(3)]
+    repository.mark_sending(
+        draft_campaign.id, "batch-1", recipient_contact_ids=[c.id for c in contacts]
+    )
+    campaign = repository.get_campaign(draft_campaign.id)
+    sent_at = campaign.sent_at
+
+    recipients = (
+        db.query(CampaignRecipient)
+        .filter(CampaignRecipient.campaign_id == campaign.id)
+        .order_by(CampaignRecipient.id)
+        .all()
+    )
+    recipients[0].opened_at = sent_at + timedelta(minutes=30)  # "<1h"
+    recipients[1].opened_at = sent_at + timedelta(hours=2)  # "1-4h"
+    recipients[1].clicked_at = sent_at + timedelta(days=10)  # "7d+"
+    db.commit()
+
+    timeline = repository.get_engagement_timeline(campaign)
+    by_label = {b.label: b for b in timeline.buckets}
+
+    assert by_label["<1h"].opened_count == 1
+    assert by_label["1-4h"].opened_count == 1
+    assert by_label["7d+"].clicked_count == 1
+    assert by_label["4-12h"].opened_count == 0
+    assert len(timeline.buckets) == 7
+
+
+def test_get_engagement_timeline_empty_before_sent(db, draft_campaign):
+    repository = CampaignRepository(db)
+    campaign = repository.get_campaign(draft_campaign.id)
+
+    timeline = repository.get_engagement_timeline(campaign)
+
+    assert all(b.opened_count == 0 and b.clicked_count == 0 for b in timeline.buckets)

@@ -16,6 +16,35 @@ from app.repositories.segment_resolver import resolve_contacts_query
 from app.repositories.soft_delete_repository import SoftDeleteRepository
 from app.repositories.tag_repository import TagRepository
 from app.utils.db.filtering import apply_filters
+from app.schemas.campaign_stats import (
+    CampaignStats,
+    CampaignEngagementTimeline,
+    EngagementTimelineBucket,
+)
+
+# Elapsed-time-since-send bucket edges, in hours, for the engagement
+# timeline. The last bucket ("7d+") catches everything past the final edge.
+_ENGAGEMENT_BUCKET_EDGES_HOURS = [1, 4, 12, 24, 72, 168]
+_ENGAGEMENT_BUCKET_LABELS = [
+    "<1h",
+    "1-4h",
+    "4-12h",
+    "12-24h",
+    "1-3d",
+    "3-7d",
+    "7d+",
+]
+
+
+def _bucket_index(event_at: datetime, sent_at: datetime) -> int:
+    """Index into _ENGAGEMENT_BUCKET_LABELS for an event this many hours
+    after sent_at. Clamped to 0 for events that appear to precede sent_at
+    (clock skew from Sendly) rather than raising."""
+    elapsed_hours = (event_at - sent_at).total_seconds() / 3600
+    for i, edge in enumerate(_ENGAGEMENT_BUCKET_EDGES_HOURS):
+        if elapsed_hours < edge:
+            return i
+    return len(_ENGAGEMENT_BUCKET_EDGES_HOURS)
 
 
 class CampaignRepository(SoftDeleteRepository[Campaign]):
@@ -384,6 +413,96 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
             },
             synchronize_session=False,
         )
+
+    def get_recipient_count(self, campaign_id: UUID) -> int:
+        """
+        Number of recipients a campaign was sent to (CampaignRecipient rows).
+
+        Args:
+            campaign_id: The ID of the campaign
+
+        Returns:
+            int: The recipient count, 0 for a campaign still in 'draft'
+        """
+        return (
+            self.db.query(func.count(CampaignRecipient.id))
+            .filter(CampaignRecipient.campaign_id == campaign_id)
+            .scalar()
+            or 0
+        )
+
+    def get_campaign_stats(self, campaign: Campaign) -> CampaignStats:
+        """
+        Compute engagement metrics for a campaign from its current aggregate
+        counts and recipient snapshot. See docs/prds/0006-campaign-analytics.md.
+
+        Args:
+            campaign: The campaign to compute stats for
+
+        Returns:
+            CampaignStats: The computed metrics
+        """
+        recipient_count = self.get_recipient_count(campaign.id)
+
+        def rate(numerator: int, denominator: int) -> float:
+            return numerator / denominator if denominator else 0.0
+
+        return CampaignStats(
+            recipient_count=recipient_count,
+            delivered_count=campaign.delivered_count,
+            bounced_count=campaign.bounced_count,
+            complained_count=campaign.complained_count,
+            opened_count=campaign.opened_count,
+            clicked_count=campaign.clicked_count,
+            delivery_rate=rate(campaign.delivered_count, recipient_count),
+            bounce_rate=rate(campaign.bounced_count, recipient_count),
+            open_rate=rate(campaign.opened_count, campaign.delivered_count),
+            click_rate=rate(campaign.clicked_count, campaign.delivered_count),
+            click_to_open_rate=rate(campaign.clicked_count, campaign.opened_count),
+            complaint_rate=rate(campaign.complained_count, campaign.delivered_count),
+            engagement_last_synced_at=campaign.engagement_last_synced_at,
+        )
+
+    def get_engagement_timeline(self, campaign: Campaign) -> CampaignEngagementTimeline:
+        """
+        Bucket a campaign's recipient opens/clicks by time elapsed since
+        Campaign.sent_at, using CampaignRecipient's first-occurrence
+        opened_at/clicked_at timestamps. See
+        docs/prds/0006-campaign-analytics.md.
+
+        All buckets are returned even when empty, so callers/charts don't
+        need to fill gaps themselves.
+
+        Args:
+            campaign: The campaign to build the timeline for
+
+        Returns:
+            CampaignEngagementTimeline: Bucketed opened/clicked counts.
+                Empty buckets (all zero) if the campaign has no sent_at yet.
+        """
+        buckets = [
+            EngagementTimelineBucket(label=label, opened_count=0, clicked_count=0)
+            for label in _ENGAGEMENT_BUCKET_LABELS
+        ]
+        if campaign.sent_at is None:
+            return CampaignEngagementTimeline(buckets=buckets)
+
+        rows = (
+            self.db.query(CampaignRecipient.opened_at, CampaignRecipient.clicked_at)
+            .filter(
+                CampaignRecipient.campaign_id == campaign.id,
+                (CampaignRecipient.opened_at.isnot(None))
+                | (CampaignRecipient.clicked_at.isnot(None)),
+            )
+            .all()
+        )
+        for opened_at, clicked_at in rows:
+            if opened_at is not None:
+                buckets[_bucket_index(opened_at, campaign.sent_at)].opened_count += 1
+            if clicked_at is not None:
+                buckets[_bucket_index(clicked_at, campaign.sent_at)].clicked_count += 1
+
+        return CampaignEngagementTimeline(buckets=buckets)
 
     def mark_failed(self, campaign_id: UUID) -> Optional[Campaign]:
         """

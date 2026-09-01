@@ -178,6 +178,46 @@ def test_list_campaign_recipients_not_found(client_test_user: TestClient):
     assert response.status_code == 404
 
 
+def test_get_campaign_stats(
+    client_test_user: TestClient, draft_campaign, test_contact, db
+):
+    from app.repositories.campaign_repository import CampaignRepository
+
+    CampaignRepository(db).mark_sending(
+        draft_campaign.id, "batch-123", recipient_contact_ids=[test_contact.id]
+    )
+
+    response = client_test_user.get(f"/campaigns/{draft_campaign.id}/stats")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["recipient_count"] == 1
+    assert data["delivery_rate"] == 0.0
+    assert "open_rate" in data
+    assert "complaint_rate" in data
+
+
+def test_get_campaign_stats_not_found(client_test_user: TestClient):
+    response = client_test_user.get(f"/campaigns/{uuid4()}/stats")
+    assert response.status_code == 404
+
+
+def test_get_campaign_engagement_timeline(client_test_user: TestClient, draft_campaign):
+    response = client_test_user.get(
+        f"/campaigns/{draft_campaign.id}/stats/engagement-timeline"
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert len(data["buckets"]) == 7
+    assert all(b["opened_count"] == 0 for b in data["buckets"])
+
+
+def test_get_campaign_engagement_timeline_not_found(client_test_user: TestClient):
+    response = client_test_user.get(f"/campaigns/{uuid4()}/stats/engagement-timeline")
+    assert response.status_code == 404
+
+
 def test_list_campaign_recipients_excludes_soft_deleted_contact(
     client_test_user: TestClient, draft_campaign, test_contact, db
 ):

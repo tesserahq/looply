@@ -78,7 +78,7 @@ def test_create_segment_contact_field_disallowed_operator_returns_422(
         "rule": {
             "root": {
                 "type": "contact_field",
-                "field": "is_active",
+                "field": "status",
                 "operator": "ilike",
                 "value": "x",
             }

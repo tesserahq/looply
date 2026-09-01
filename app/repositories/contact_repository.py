@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.contact import Contact
-from app.schemas.contact import ContactCreate, ContactType, ContactUpdate
+from app.schemas.contact import ContactCreate, ContactStatus, ContactType, ContactUpdate
 from app.repositories.soft_delete_repository import SoftDeleteRepository
 from app.repositories.tag_repository import TagRepository
 from app.utils.db.filtering import apply_filters
@@ -144,7 +144,7 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         """
         return (
             self.db.query(Contact)
-            .filter(Contact.is_active == True)
+            .filter(Contact.status == ContactStatus.ACTIVE.value)
             .offset(skip)
             .limit(limit)
             .all()
@@ -177,6 +177,8 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         identity_value: str,
         contact_field_values: dict,
         source: Optional[str],
+        default_status: Optional[str] = None,
+        default_tags: Optional[List[str]] = None,
     ) -> Contact:
         """
         Resolve an ingested NATS event to a Contact via identity_field
@@ -189,7 +191,10 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         On a known identity, contact fields are never overwritten here - only
         Looply's own contact-edit flows do - so an event can't silently clobber
         data an operator has since corrected (see 0002's "Identity" and user
-        story 10).
+        story 10). default_status/default_tags (the parent EventMapping's
+        configured defaults) are likewise only ever applied on the creation
+        branch below, for the same reason - see
+        docs/prds/0005-contact-status-and-event-mapping-defaults.md.
 
         A contact created this way has no authenticated Looply user
         (created_by_id=None) and no real phone/contact-type data from the event, so
@@ -204,6 +209,8 @@ class ContactRepository(SoftDeleteRepository[Contact]):
             return existing
 
         attrs = {**contact_field_values, identity_field: identity_value}
+        if default_status:
+            attrs["status"] = default_status
         contact = Contact(
             **attrs,
             contact_type=ContactType.LEAD.value,
@@ -214,6 +221,9 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         self.db.add(contact)
         self.db.commit()
         self.db.refresh(contact)
+        if default_tags:
+            TagRepository(self.db).set_contact_tags(contact.id, default_tags, None)
+            self.db.expire(contact, ["_tags_rel"])
         return contact
 
     def bulk_create_contacts(self, contacts: List[ContactCreate]) -> List[Contact]:
@@ -370,19 +380,3 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         """Get contacts deleted after a specific date."""
         return self.get_records_deleted_after(date)
 
-    def toggle_contact_active_status(self, contact_id: UUID) -> Optional[Contact]:
-        """
-        Toggle the active status of a contact.
-
-        Args:
-            contact_id: The ID of the contact to toggle
-
-        Returns:
-            Optional[Contact]: The updated contact or None if not found
-        """
-        db_contact = self.db.query(Contact).filter(Contact.id == contact_id).first()
-        if db_contact:
-            db_contact.is_active = not db_contact.is_active
-            self.db.commit()
-            self.db.refresh(db_contact)
-        return db_contact

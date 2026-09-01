@@ -403,7 +403,7 @@ def test_contact_count_matches_member_list_length(
         last_name=faker.last_name(),
         contact_type="business",
         phone_type="work",
-        is_active=True,
+        status="active",
         created_by_id=test_user.id,
     )
     db.add(other_contact)

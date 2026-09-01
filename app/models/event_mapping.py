@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.mixins import TimestampMixin, SoftDeleteMixin
 from sqlalchemy import Column, ForeignKey, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 import uuid
 
 from app.db import Base
@@ -57,6 +57,20 @@ class EventMapping(Base, TimestampMixin, SoftDeleteMixin):
     # find/create the Contact identified by identity_target_field. Set together
     # with identity_target_field, or not at all.
     identity_source_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Status stamped onto Contact.status for every contact auto-created while
+    # ingesting this event_type - one of ContactStatus's values (see
+    # app.schemas.contact). Applied only at creation, never on an
+    # already-resolved contact (see get_or_create_from_event). Null means "use
+    # Contact.status's own default (active)". See
+    # docs/prds/0005-contact-status-and-event-mapping-defaults.md.
+    default_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Tag names stamped onto every contact auto-created while ingesting this
+    # event_type, via the same TagRepository.set_contact_tags write path
+    # manual tagging uses. Applied only at creation, same as default_status.
+    # Null/empty means no tags are applied.
+    default_tags: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String), nullable=True
+    )
     # Null for host API calls, set to the operator's user id when created through
     # the UI - mirrors EventFieldMapping.created_by_id.
     created_by_id: Mapped[UUID | None] = mapped_column(

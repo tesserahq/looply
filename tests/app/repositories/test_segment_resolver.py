@@ -36,7 +36,7 @@ def _contact(db, faker, test_user, **overrides):
         email=faker.unique.email(),
         contact_type="business",
         phone_type="work",
-        is_active=True,
+        status="active",
         created_by_id=test_user.id,
     )
     defaults.update(overrides)
@@ -489,16 +489,16 @@ def test_contact_field_in(db, faker, test_user):
     assert other.id not in resolved_ids
 
 
-def test_contact_field_is_active_boolean(db, faker, test_user):
-    active = _contact(db, faker, test_user, is_active=True)
-    inactive = _contact(db, faker, test_user, is_active=False)
+def test_contact_field_status(db, faker, test_user):
+    active = _contact(db, faker, test_user, status="active")
+    inactive = _contact(db, faker, test_user, status="inactive")
 
     root = _root(
         {
             "type": "contact_field",
-            "field": "is_active",
+            "field": "status",
             "operator": "==",
-            "value": False,
+            "value": "inactive",
         }
     )
     resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
@@ -507,12 +507,32 @@ def test_contact_field_is_active_boolean(db, faker, test_user):
     assert active.id not in resolved_ids
 
 
+def test_contact_field_status_in(db, faker, test_user):
+    active = _contact(db, faker, test_user, status="active")
+    pending = _contact(db, faker, test_user, status="pending")
+    inactive = _contact(db, faker, test_user, status="inactive")
+
+    root = _root(
+        {
+            "type": "contact_field",
+            "field": "status",
+            "operator": "in",
+            "value": ["active", "pending"],
+        }
+    )
+    resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
+
+    assert active.id in resolved_ids
+    assert pending.id in resolved_ids
+    assert inactive.id not in resolved_ids
+
+
 def test_contact_field_rejects_disallowed_operator():
     with pytest.raises(ValueError):
         _root(
             {
                 "type": "contact_field",
-                "field": "is_active",
+                "field": "status",
                 "operator": "ilike",
                 "value": "x",
             }

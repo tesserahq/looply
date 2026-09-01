@@ -134,6 +134,8 @@ def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
         identity_value=resolved.identity_value,
         contact_field_values=resolved.contact_field_values,
         source=event_mapping.source,
+        default_status=event_mapping.default_status,
+        default_tags=event_mapping.default_tags,
     )
 
     event = CustomEventRepository(db).create_event(

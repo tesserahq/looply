@@ -139,6 +139,48 @@ def test_auto_created_contact_stamped_with_event_mapping_source(db, test_user):
     assert contact.source == "linden"
 
 
+def test_auto_created_contact_stamped_with_default_status_and_tags(db, test_user):
+    event_mapping = EventMapping(
+        event_type="com.mylinden.person.updated",
+        identity_target_field="external_id",
+        identity_source_path="person.id",
+        default_status="pending",
+        default_tags=["lead", "linden"],
+        created_by_id=test_user.id,
+    )
+    db.add(event_mapping)
+    db.commit()
+
+    envelope = _envelope()
+    _process_nats_event(db, envelope)
+
+    contact = ContactRepository(db).get_contact_by_external_id("person-external-id")
+    assert contact.status == "pending"
+    assert sorted(contact.tags) == ["lead", "linden"]
+
+
+def test_known_contact_status_and_tags_not_overwritten_by_defaults(
+    db, test_contact, test_identity_event_mapping
+):
+    """An event resolving to an already-existing contact must not have its
+    status/tags overwritten by the mapping's default_status/default_tags -
+    same no-clobber guarantee as other contact fields."""
+    test_contact.external_id = "person-external-id"
+    test_contact.status = "active"
+    db.commit()
+
+    test_identity_event_mapping.default_status = "inactive"
+    test_identity_event_mapping.default_tags = ["should-not-apply"]
+    db.commit()
+
+    envelope = _envelope()
+    _process_nats_event(db, envelope)
+
+    db.refresh(test_contact)
+    assert test_contact.status == "active"
+    assert test_contact.tags == []
+
+
 def test_email_identity_key_resolves_by_email(db, test_user):
     """A different event_type configured to key off email instead of
     external_id resolves/creates via Contact.email."""

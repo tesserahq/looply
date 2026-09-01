@@ -76,6 +76,8 @@ class EventMappingRepository(SoftDeleteRepository[EventMapping]):
             source=event_mapping.source,
             identity_target_field=event_mapping.identity_target_field,
             identity_source_path=event_mapping.identity_source_path,
+            default_status=event_mapping.default_status,
+            default_tags=event_mapping.default_tags,
             created_by_id=event_mapping.created_by_id,
         )
         self.db.add(db_event_mapping)

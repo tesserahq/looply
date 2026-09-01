@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.mixins import TimestampMixin, SoftDeleteMixin
-from sqlalchemy import Column, ForeignKey, String, Text, Boolean, Computed
+from sqlalchemy import Column, ForeignKey, String, Text, Computed
 from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
 import uuid
 
@@ -38,7 +38,14 @@ class Contact(Base, TimestampMixin, SoftDeleteMixin):
     zip_code: Mapped[str | None] = mapped_column(String, nullable=True)
     country: Mapped[str | None] = mapped_column(String, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Lifecycle status: "active" | "inactive" | "pending" (see ContactStatus in
+    # app.schemas.contact). Only "active" contacts are campaign-send-eligible
+    # (app.repositories.campaign_repository) - "pending" lets an
+    # EventMapping-auto-created contact exist without yet being treated as
+    # active. Not to be confused with `state`, the US mailing-address field
+    # below. Replaces the old boolean is_active column - see
+    # docs/prds/0005-contact-status-and-event-mapping-defaults.md.
+    status: Mapped[str] = mapped_column(String, nullable=False, default="active")
     # Free-form provenance: "manual", "website", "phone", or an event-derived value
     # stamped from EventMapping.source at auto-create time (see
     # docs/prds/0003-event-driven-contact-resolution.md and

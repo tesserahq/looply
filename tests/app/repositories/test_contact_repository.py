@@ -329,6 +329,32 @@ def test_get_or_create_from_event_does_not_clobber_existing_contact(db, test_con
     assert resolved.tags == original_tags
 
 
+def test_get_or_create_from_event_backfills_external_id_on_email_collision(
+    db, test_contact, faker
+):
+    """A contact created before this external_id existed (e.g. added to Looply
+    manually, later becomes a Linden customer) must not collide with the
+    unique email constraint - it should adopt the event's external_id
+    instead of a duplicate insert being attempted."""
+    contact_repository = ContactRepository(db)
+    assert test_contact.external_id is None
+    new_external_id = str(faker.uuid4())
+
+    resolved = contact_repository.get_or_create_from_event(
+        identity_field="external_id",
+        identity_value=new_external_id,
+        contact_field_values={"email": test_contact.email},
+        source="linden",
+        default_status="pending",
+        default_tags=["should-not-apply"],
+    )
+
+    assert resolved.id == test_contact.id
+    assert resolved.external_id == new_external_id
+    assert resolved.status == test_contact.status
+    assert resolved.tags == list(test_contact.tags)
+
+
 def test_contact_full_name_property(db, test_contact):
     """Test the full_name property of the contact."""
     # Test with all name parts

@@ -80,3 +80,25 @@ def test_get_contacts_by_tags_query_is_any_match(db, test_user, test_contact):
     matches = repository.get_contacts_by_tags_query(["vip", "nonexistent"]).all()
 
     assert [c.id for c in matches] == [test_contact.id]
+
+
+def test_get_tags_with_counts_query_reflects_assignments(db, test_user, test_contact):
+    repository = TagRepository(db)
+    repository.set_contact_tags(test_contact.id, ["vip"], test_user.id)
+    repository.create_tag("unused", test_user.id)
+
+    rows = {
+        tag.name: (contacts, campaigns)
+        for tag, contacts, campaigns in repository.get_tags_with_counts_query().all()
+    }
+
+    assert rows["vip"] == (1, 0)
+    assert rows["unused"] == (0, 0)
+
+
+def test_get_usage_counts_for_single_tag(db, test_user, test_contact):
+    repository = TagRepository(db)
+    repository.set_contact_tags(test_contact.id, ["vip"], test_user.id)
+    tag = repository.get_by_name("vip")
+
+    assert repository.get_usage_counts(tag.id) == (1, 0)

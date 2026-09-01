@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -41,6 +41,45 @@ class TagRepository(SoftDeleteRepository[Tag]):
     def get_tags_query(self):
         """Get a query for all active tags, for pagination."""
         return self.db.query(Tag).order_by(Tag.name)
+
+    def get_tags_with_counts_query(self):
+        """Query for all active tags plus their contact/campaign assignment
+        counts, for the tags management list. Each row is a
+        (Tag, contacts_count, campaigns_count) tuple - the counts are
+        correlated scalar subqueries, so this is one query per page, not
+        one per tag (no N+1)."""
+        contacts_count = (
+            select(func.count(ContactTag.id))
+            .where(ContactTag.tag_id == Tag.id)
+            .correlate(Tag)
+            .scalar_subquery()
+        )
+        campaigns_count = (
+            select(func.count(CampaignTag.id))
+            .where(CampaignTag.tag_id == Tag.id)
+            .correlate(Tag)
+            .scalar_subquery()
+        )
+        return self.db.query(
+            Tag,
+            contacts_count.label("contacts_count"),
+            campaigns_count.label("campaigns_count"),
+        ).order_by(Tag.name)
+
+    def get_usage_counts(self, tag_id: UUID) -> tuple[int, int]:
+        """(contacts_count, campaigns_count) for a single tag - used by the
+        delete-confirm usage check, where only one tag's counts are needed."""
+        contacts_count = (
+            self.db.query(func.count(ContactTag.id))
+            .filter(ContactTag.tag_id == tag_id)
+            .scalar()
+        )
+        campaigns_count = (
+            self.db.query(func.count(CampaignTag.id))
+            .filter(CampaignTag.tag_id == tag_id)
+            .scalar()
+        )
+        return contacts_count, campaigns_count
 
     def create_tag(self, name: str, created_by_id: Optional[UUID]) -> Tag:
         """

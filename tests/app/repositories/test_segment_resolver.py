@@ -95,6 +95,59 @@ def test_list_membership_not_in(db, faker, test_user, test_contact_list, test_co
     assert outside.id in resolved_ids
 
 
+def test_tags_in_matches_any_of_selected_tags(db, faker, test_user, test_contact):
+    from app.repositories.tag_repository import TagRepository
+
+    tags = TagRepository(db).set_contact_tags(test_contact.id, ["vip"], test_user.id)
+    other_tag = TagRepository(db).create_tag("lead", test_user.id)
+    outside = _contact(db, faker, test_user)
+
+    root = _root(
+        {
+            "type": "tags",
+            "tag_ids": [str(tags[0].id), str(other_tag.id)],
+            "op": "in",
+        }
+    )
+    resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
+
+    assert test_contact.id in resolved_ids
+    assert outside.id not in resolved_ids
+
+
+def test_tags_not_in_excludes_contacts_with_any_selected_tag(
+    db, faker, test_user, test_contact
+):
+    from app.repositories.tag_repository import TagRepository
+
+    tags = TagRepository(db).set_contact_tags(test_contact.id, ["vip"], test_user.id)
+    outside = _contact(db, faker, test_user)
+
+    root = _root({"type": "tags", "tag_ids": [str(tags[0].id)], "op": "not_in"})
+    resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
+
+    assert test_contact.id not in resolved_ids
+    assert outside.id in resolved_ids
+
+
+def test_tags_condition_referencing_deleted_tag_matches_nobody(
+    db, faker, test_user, test_contact
+):
+    """A tag deleted after a segment was saved must never error the
+    segment - it just stops matching, same as a dangling list_id."""
+    from app.repositories.tag_repository import TagRepository
+
+    repository = TagRepository(db)
+    repository.set_contact_tags(test_contact.id, ["vip"], test_user.id)
+    tag = repository.get_by_name("vip")
+    repository.delete_tag(tag.id)
+
+    root = _root({"type": "tags", "tag_ids": [str(tag.id)], "op": "in"})
+    resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
+
+    assert resolved_ids == set()
+
+
 def test_rule_tree_with_zero_list_membership_conditions_resolves_whole_contact_base(
     db, faker, test_user, test_contact_list, test_segment, test_contact
 ):

@@ -19,6 +19,38 @@ def _list_membership_rule(list_id) -> SegmentRuleCreate:
     )
 
 
+def _tags_rule(tag_id) -> SegmentRuleCreate:
+    return SegmentRuleCreate.model_validate(
+        {"root": {"type": "tags", "tag_ids": [str(tag_id)], "op": "in"}}
+    )
+
+
+def test_get_segments_referencing_tag(db, faker, test_user):
+    from app.repositories.tag_repository import TagRepository
+
+    tag = TagRepository(db).create_tag("vip", test_user.id)
+    other_tag = TagRepository(db).create_tag("lead", test_user.id)
+    repository = SegmentRepository(db)
+    referencing = repository.create_segment(
+        SegmentCreate(
+            name=faker.catch_phrase(),
+            rule=_tags_rule(tag.id),
+            created_by_id=test_user.id,
+        )
+    )
+    repository.create_segment(
+        SegmentCreate(
+            name=faker.catch_phrase(),
+            rule=_tags_rule(other_tag.id),
+            created_by_id=test_user.id,
+        )
+    )
+
+    results = repository.get_segments_referencing_tag(tag.id)
+
+    assert [s.id for s in results] == [referencing.id]
+
+
 def test_create_segment(db, faker, test_user, test_contact_list):
     repository = SegmentRepository(db)
     segment = repository.create_segment(

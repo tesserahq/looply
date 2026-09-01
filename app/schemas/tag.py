@@ -29,3 +29,30 @@ class Tag(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class TagWithCounts(Tag):
+    """A tag plus how many contacts/campaigns it's currently assigned to -
+    used by GET /tags so the management list can show usage at a glance."""
+
+    contacts_count: int
+    campaigns_count: int
+
+
+class TagUsageSegment(BaseModel):
+    """A segment referenced in a TagUsage response."""
+
+    id: UUID
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+class TagUsage(BaseModel):
+    """A tag's full impact if deleted: how many contacts/campaigns would
+    lose the tag, and which saved segments would silently stop matching
+    it. Fetched lazily by the delete-confirm dialog, not part of the list."""
+
+    contacts_count: int
+    campaigns_count: int
+    segments: list[TagUsageSegment]

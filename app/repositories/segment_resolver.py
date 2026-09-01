@@ -17,6 +17,7 @@ from app.models.campaign_recipient import CampaignRecipient
 from app.models.contact import Contact
 from app.models.contact_custom_field_value import ContactCustomFieldValue
 from app.models.contact_list_member import ContactListMember
+from app.models.contact_tag import ContactTag
 from app.models.custom_field_definition import CustomFieldDefinition
 from app.schemas.custom_field_definition import FieldValueType
 from app.schemas.segment_rule import (
@@ -31,6 +32,8 @@ from app.schemas.segment_rule import (
     LogicalOp,
     RuleGroup,
     RuleNode,
+    TagMembershipCondition,
+    TagMembershipOp,
 )
 from app.utils.db.filtering import OPERATORS
 
@@ -156,6 +159,22 @@ def _require_completed_campaign(db: Session, campaign_id) -> None:
         )
 
 
+def collect_tag_ids(root: RuleNode) -> set:
+    """All tag_ids referenced anywhere in a rule tree's tags leaves.
+
+    Used to warn before deleting a tag that a saved segment still filters
+    on - see app.routers.tag's GET /tags/{tag_id}/usage.
+    """
+    if isinstance(root, RuleGroup):
+        ids: set = set()
+        for child in root.conditions:
+            ids |= collect_tag_ids(child)
+        return ids
+    if isinstance(root, TagMembershipCondition):
+        return set(root.tag_ids)
+    return set()
+
+
 def _list_membership_clause(condition: ListMembershipCondition):
     member_exists = (
         select(ContactListMember.id)
@@ -167,6 +186,20 @@ def _list_membership_clause(condition: ListMembershipCondition):
         .exists()
     )
     if condition.op == ListMembershipOp.IN:
+        return member_exists
+    return ~member_exists
+
+
+def _tag_membership_clause(condition: TagMembershipCondition):
+    member_exists = (
+        select(ContactTag.id)
+        .where(
+            ContactTag.contact_id == Contact.id,
+            ContactTag.tag_id.in_(condition.tag_ids),
+        )
+        .exists()
+    )
+    if condition.op == TagMembershipOp.IN:
         return member_exists
     return ~member_exists
 
@@ -229,6 +262,8 @@ def _compile(db: Session, node: RuleNode):
         return _contact_field_clause(node)
     if isinstance(node, CustomFieldCondition):
         return _custom_field_clause(db, node)
+    if isinstance(node, TagMembershipCondition):
+        return _tag_membership_clause(node)
     raise TypeError(f"Unknown rule node type: {type(node)!r}")  # pragma: no cover
 
 

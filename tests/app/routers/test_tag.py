@@ -33,6 +33,44 @@ def test_get_tag_not_found(client_test_user):
     assert client_test_user.get(f"/tags/{uuid4()}").status_code == 404
 
 
+def test_list_tags_includes_usage_counts(client_test_user, faker):
+    client_test_user.post("/tags", json={"name": "vip"})
+    client_test_user.post(
+        "/contacts",
+        json={
+            "first_name": faker.first_name(),
+            "contact_type": "lead",
+            "phone_type": "mobile",
+            "tags": ["vip"],
+        },
+    )
+
+    response = client_test_user.get("/tags")
+
+    assert response.status_code == 200
+    vip = next(t for t in response.json()["items"] if t["name"] == "vip")
+    assert vip["contacts_count"] == 1
+    assert vip["campaigns_count"] == 0
+
+
+def test_tag_usage_lists_referencing_segments(client_test_user):
+    tag = client_test_user.post("/tags", json={"name": "vip"}).json()
+    segment = client_test_user.post(
+        "/segments",
+        json={
+            "name": "VIP segment",
+            "rule": {"root": {"type": "tags", "tag_ids": [tag["id"]], "op": "in"}},
+        },
+    ).json()
+
+    response = client_test_user.get(f"/tags/{tag['id']}/usage")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["contacts_count"] == 0
+    assert [s["id"] for s in body["segments"]] == [segment["id"]]
+
+
 def test_create_contact_with_tags_auto_creates_them(client_test_user, faker):
     payload = {
         "first_name": faker.first_name(),

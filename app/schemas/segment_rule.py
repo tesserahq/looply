@@ -38,6 +38,7 @@ class ConditionType(str, Enum):
     CAMPAIGN_ACTIVITY = "campaign_activity"
     CONTACT_FIELD = "contact_field"
     CUSTOM_FIELD = "custom_field"
+    TAGS = "tags"
 
 
 class LogicalOp(str, Enum):
@@ -71,6 +72,28 @@ class CampaignActivityCondition(BaseModel):
     campaign_id: UUID
     event: CampaignActivityEvent
     op: CampaignActivityOp
+
+
+class TagMembershipOp(str, Enum):
+    IN = "in"
+    NOT_IN = "not_in"
+
+
+class TagMembershipCondition(BaseModel):
+    """Matches a contact against a set of tags with ANY-of (OR) semantics:
+    IN means "has at least one of tag_ids", NOT_IN means "has none of
+    tag_ids". ALL-of-multiple-tags is expressible by nesting multiple
+    single-tag IN conditions under an AND RuleGroup instead of a separate
+    match-mode field here.
+
+    No tag existence is validated here or at resolve time (same as
+    list_membership's list_id) - a tag_id that no longer exists just never
+    matches, it doesn't error the segment.
+    """
+
+    type: Literal[ConditionType.TAGS] = ConditionType.TAGS
+    tag_ids: list[UUID] = Field(min_length=1, max_length=MAX_IN_VALUES)
+    op: TagMembershipOp
 
 
 class ContactFieldName(str, Enum):
@@ -182,6 +205,7 @@ Leaf = Annotated[
         CampaignActivityCondition,
         ContactFieldCondition,
         CustomFieldCondition,
+        TagMembershipCondition,
     ],
     Field(discriminator="type"),
 ]

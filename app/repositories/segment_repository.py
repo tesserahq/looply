@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.segment import Segment
 from app.repositories.soft_delete_repository import SoftDeleteRepository
 from app.repositories.segment_resolver import (
+    collect_tag_ids,
     resolve_contacts_query,
     resolve_count,
     validate_campaign_references,
@@ -105,6 +106,16 @@ class SegmentRepository(SoftDeleteRepository[Segment]):
     def get_root(self, segment: Segment) -> RuleNode:
         """Parse a persisted segment's stored rule back into a RuleNode."""
         return SegmentRuleCreate.model_validate(segment.rule).root
+
+    def get_segments_referencing_tag(self, tag_id: UUID) -> List[Segment]:
+        """Segments whose rule tree filters on tag_id, for warning before a
+        cascading tag delete - see app.routers.tag's GET /tags/{tag_id}/usage.
+        """
+        return [
+            segment
+            for segment in self.get_segments_query().all()
+            if tag_id in collect_tag_ids(self.get_root(segment))
+        ]
 
     def resolve_contacts(self, segment: Segment) -> List:
         """

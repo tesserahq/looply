@@ -14,6 +14,7 @@ from app.schemas.campaign import (
     SendCampaignResponse,
 )
 from app.schemas.campaign_recipient import CampaignRecipient as CampaignRecipientSchema
+from app.schemas.campaign_stats import CampaignStats, CampaignEngagementTimeline
 from app.repositories.campaign_repository import CampaignRepository
 from app.repositories.segment_repository import SegmentRepository
 from app.routers.utils.dependencies import get_campaign_by_id
@@ -88,6 +89,31 @@ def list_campaign_recipients(
     return paginate(
         db, campaign_repository.get_recipients_by_campaign_query(campaign.id)
     )
+
+
+@router.get("/{campaign_id}/stats", response_model=CampaignStats)
+def get_campaign_stats(
+    campaign: CampaignModel = Depends(get_campaign_by_id),
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
+    """Computed engagement metrics (delivery/open/click/complaint rates)
+    for a campaign. All zero for a campaign still in 'draft'."""
+    return CampaignRepository(db).get_campaign_stats(campaign)
+
+
+@router.get(
+    "/{campaign_id}/stats/engagement-timeline",
+    response_model=CampaignEngagementTimeline,
+)
+def get_campaign_engagement_timeline(
+    campaign: CampaignModel = Depends(get_campaign_by_id),
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
+    """Opens/clicks bucketed by time elapsed since the campaign was sent.
+    Empty buckets for a campaign that hasn't been sent yet."""
+    return CampaignRepository(db).get_engagement_timeline(campaign)
 
 
 @router.put("/{campaign_id}", response_model=Campaign)

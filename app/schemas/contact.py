@@ -128,8 +128,9 @@ class ContactBase(BaseModel):
     """Provenance: "manual", "website", "phone", or an event-derived value stamped
     from EventMapping.source. Unset for contacts that predate this field."""
 
-    created_by_id: UUID
-    """ID of the user who created this contact. Required field."""
+    created_by_id: Optional[UUID] = None
+    """ID of the user who created this contact. Null for contacts created
+    automatically from inbound events (see ContactRepository)."""
 
 
 class ContactCreate(ContactBase):
@@ -355,8 +356,9 @@ class ContactDetails(BaseModel):
     source: Optional[str] = None
     """Provenance: "manual", "website", "phone", or an event-derived value."""
 
-    created_by_id: UUID
-    """ID of the user who created this contact."""
+    created_by_id: Optional[UUID] = None
+    """ID of the user who created this contact. Null for contacts created
+    automatically from inbound events."""
 
     created_at: datetime
     """Timestamp when the contact record was created."""

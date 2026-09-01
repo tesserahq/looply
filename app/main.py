@@ -21,8 +21,7 @@ from .routers import (
     segment,
     custom_field,
     custom_event,
-    event_field_mapping,
-    tracked_event_type,
+    event_mapping,
     tag,
 )
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -111,8 +110,8 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
     app.include_router(custom_field.nested_router)
     app.include_router(custom_event.router)
     app.include_router(custom_event.nested_router)
-    app.include_router(event_field_mapping.router)
-    app.include_router(tracked_event_type.router)
+    app.include_router(event_mapping.router)
+    app.include_router(event_mapping.nested_router)
     app.include_router(tag.router)
 
     app.include_router(get_livez_readyz_router())

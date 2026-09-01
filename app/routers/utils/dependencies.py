@@ -11,9 +11,7 @@ from app.repositories.custom_field_definition_repository import (
 from app.repositories.event_field_mapping_repository import (
     EventFieldMappingRepository,
 )
-from app.repositories.tracked_event_type_repository import (
-    TrackedEventTypeRepository,
-)
+from app.repositories.event_mapping_repository import EventMappingRepository
 from app.repositories.custom_event_repository import CustomEventRepository
 from app.repositories.tag_repository import TagRepository
 from app.models.contact import Contact
@@ -21,7 +19,7 @@ from app.models.campaign import Campaign
 from app.models.segment import Segment
 from app.models.custom_field_definition import CustomFieldDefinition
 from app.models.event_field_mapping import EventFieldMapping
-from app.models.tracked_event_type import TrackedEventType
+from app.models.event_mapping import EventMapping
 from app.models.custom_event import CustomEvent
 from app.models.tag import Tag
 
@@ -153,15 +151,43 @@ def get_custom_field_definition_by_id(
     return definition
 
 
-def get_event_field_mapping_by_id(
-    mapping_id: UUID, db: Session = Depends(get_db)
-) -> EventFieldMapping:
+def get_event_mapping_by_id(
+    event_mapping_id: UUID, db: Session = Depends(get_db)
+) -> EventMapping:
     """
-    Dependency to get an event-to-field mapping by ID.
+    Dependency to get an event mapping by ID.
     Raises 404 if not found (or soft-deleted).
 
     Args:
-        mapping_id: The ID of the mapping to retrieve
+        event_mapping_id: The ID of the event mapping to retrieve
+        db: Database session
+
+    Returns:
+        EventMapping: The event mapping instance
+
+    Raises:
+        HTTPException: 404 if not found
+    """
+    event_mapping = EventMappingRepository(db).get_event_mapping(event_mapping_id)
+    if not event_mapping:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event mapping not found",
+        )
+    return event_mapping
+
+
+def get_event_field_mapping_by_id(
+    event_mapping_id: UUID, mapping_id: UUID, db: Session = Depends(get_db)
+) -> EventFieldMapping:
+    """
+    Dependency to get an event-to-field mapping by ID, scoped to its parent
+    event mapping. Raises 404 if not found (or soft-deleted), or if it belongs
+    to a different event mapping than the URL names.
+
+    Args:
+        event_mapping_id: The ID of the parent event mapping named in the URL
+        mapping_id: The ID of the field mapping to retrieve
         db: Database session
 
     Returns:
@@ -171,40 +197,12 @@ def get_event_field_mapping_by_id(
         HTTPException: 404 if not found
     """
     mapping = EventFieldMappingRepository(db).get_mapping(mapping_id)
-    if not mapping:
+    if not mapping or mapping.event_mapping_id != event_mapping_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Event field mapping not found",
         )
     return mapping
-
-
-def get_tracked_event_type_by_id(
-    tracked_event_type_id: UUID, db: Session = Depends(get_db)
-) -> TrackedEventType:
-    """
-    Dependency to get a tracked event type by ID.
-    Raises 404 if not found (or soft-deleted).
-
-    Args:
-        tracked_event_type_id: The ID of the registration to retrieve
-        db: Database session
-
-    Returns:
-        TrackedEventType: The registration instance
-
-    Raises:
-        HTTPException: 404 if not found
-    """
-    tracked = TrackedEventTypeRepository(db).get_tracked_event_type(
-        tracked_event_type_id
-    )
-    if not tracked:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tracked event type not found",
-        )
-    return tracked
 
 
 def get_custom_event_by_id(

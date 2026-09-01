@@ -13,7 +13,7 @@ class CustomEvent(Base, TimestampMixin):
 
     Deliberately not named ContactCustomEvent: Looply's NATS subscription sees every
     event type on the shared stream, not just contact-relevant ones - only event
-    types registered in TrackedEventType are ever turned into a row here (see
+    types with a registered EventMapping are ever turned into a row here (see
     app.tasks.process_nats_event_task). The contact link is one property of an
     event, not its primary identity.
 
@@ -31,9 +31,9 @@ class CustomEvent(Base, TimestampMixin):
         nullable=False,
     )
     # The envelope's event_type (e.g. "com.mylinden.person.updated"). Matched
-    # against TrackedEventType.event_type at ingestion time, but stored as a plain
+    # against EventMapping.event_type at ingestion time, but stored as a plain
     # string rather than a FK - a recorded event is a historical fact that should
-    # survive the tracked-type registration later being deleted.
+    # survive the EventMapping registration later being deleted.
     name: Mapped[str] = mapped_column(String, nullable=False)
     # The envelope's time.
     occurred_at: Mapped[DateTime] = mapped_column(DateTime, nullable=False)

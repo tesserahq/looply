@@ -6,17 +6,20 @@ NATS handler in run_nats_worker.py only dispatches the raw message dict here via
 upsert, and CustomEvent creation happens in this task.
 
 Looply's NATS subscription sees every event type on the shared stream (subscribed
-via "com.>"), not just contact-relevant ones. An event whose type isn't registered
-in TrackedEventType is dropped up front - no Contact resolution/auto-create, no
+via "com.>"), not just contact-relevant ones. An event whose type has no
+EventMapping row is dropped up front - no Contact resolution/auto-create, no
 CustomEvent row, no EventFieldMapping applied - so untracked traffic never causes
 DB writes or junk contacts.
 
-Contact identity and attribute population are both driven by EventFieldMapping,
-resolved once per event via app.services.event_mapping_resolver - which payload
-path identifies the contact (and whether that's a Contact.external_id or .email
-lookup), and which paths fill in built-in Contact fields vs. custom fields, are
-all operator-configured per event_type rather than hardcoded to a single
-envelope shape. See docs/prds/0003-event-driven-contact-resolution.md.
+Contact identity and attribute population are both driven by EventMapping (the
+parent registration, holding identity configuration) and its EventFieldMapping
+children (non-identity attributes), resolved once per event via
+app.services.event_mapping_resolver - which payload path identifies the contact
+(and whether that's a Contact.external_id or .email lookup), and which paths
+fill in built-in Contact fields vs. custom fields, are all operator-configured
+per event_type rather than hardcoded to a single envelope shape. See
+docs/prds/0003-event-driven-contact-resolution.md and
+docs/prds/0004-event-mapping-consolidation.md.
 """
 
 import logging
@@ -36,9 +39,7 @@ from app.repositories.contact_repository import ContactRepository
 from app.repositories.event_field_mapping_repository import (
     EventFieldMappingRepository,
 )
-from app.repositories.tracked_event_type_repository import (
-    TrackedEventTypeRepository,
-)
+from app.repositories.event_mapping_repository import EventMappingRepository
 from app.services.event_mapping_resolver import resolve as resolve_event_mappings
 from app.utils.db.db_session_helper import db_session
 
@@ -84,17 +85,18 @@ def _apply_custom_field_values(
 def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
     """
     Process a single CloudEvents-shaped envelope received over NATS: if its
-    event_type is tracked, resolve (or auto-create) the Contact identified by
-    that event_type's configured identity-key EventFieldMapping, then record a
-    CustomEvent against it.
+    event_type has a registered EventMapping, resolve (or auto-create) the
+    Contact identified by that EventMapping's identity configuration, then
+    record a CustomEvent against it.
 
     Only event_type, time, and event_data are read from the envelope for
     ingestion - the rest (source, spec_version, subject, tags, labels, user,
     the envelope's own id) is stored verbatim in raw_envelope for audit, per the
     PRD. Contact identity/attributes come entirely from event_data via
-    EventFieldMapping - there is deliberately no hardcoded envelope field read
-    for identity anymore (see docs/prds/0003-event-driven-contact-resolution.md
-    for why the previous hardcoded top-level `user` read was wrong).
+    EventMapping/EventFieldMapping - there is deliberately no hardcoded envelope
+    field read for identity anymore (see
+    docs/prds/0003-event-driven-contact-resolution.md for why the previous
+    hardcoded top-level `user` read was wrong).
 
     Args:
         db: Database session.
@@ -106,8 +108,8 @@ def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
         source_path didn't resolve for this event.
     """
     event_type = msg.get("event_type", "")
-    tracked = TrackedEventTypeRepository(db).get_by_event_type(event_type)
-    if not tracked:
+    event_mapping = EventMappingRepository(db).get_by_event_type(event_type)
+    if not event_mapping:
         logger.debug(f"Dropping untracked event_type {event_type!r}")
         return None
 
@@ -116,12 +118,14 @@ def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
     if not isinstance(event_data, dict):
         event_data = {} if event_data is None else {"data": event_data}
 
-    mappings = EventFieldMappingRepository(db).get_mappings_for_event_type(event_type)
-    resolved = resolve_event_mappings(mappings, event_data)
+    field_mappings = EventFieldMappingRepository(db).get_mappings_for_event_mapping(
+        event_mapping.id
+    )
+    resolved = resolve_event_mappings(event_mapping, field_mappings, event_data)
     if not resolved.has_identity:
         logger.error(
-            f"Dropping NATS event: no is_identity_key mapping configured for "
-            f"event_type {event_type!r}, or its source_path didn't resolve: {msg}"
+            "Dropping NATS event: no identity configured for event_type "
+            f"{event_type!r}, or its identity_source_path didn't resolve: {msg}"
         )
         return None
 
@@ -129,7 +133,7 @@ def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
         identity_field=resolved.identity_field,
         identity_value=resolved.identity_value,
         contact_field_values=resolved.contact_field_values,
-        source=tracked.source,
+        source=event_mapping.source,
     )
 
     event = CustomEventRepository(db).create_event(

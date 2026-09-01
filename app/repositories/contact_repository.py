@@ -180,9 +180,9 @@ class ContactRepository(SoftDeleteRepository[Contact]):
     ) -> Contact:
         """
         Resolve an ingested NATS event to a Contact via identity_field
-        ("external_id" or "email") and identity_value - the EventFieldMapping
-        flagged is_identity_key for this event's event_type names both (see
-        app.services.event_mapping_resolver and
+        ("external_id" or "email") and identity_value - the parent EventMapping's
+        identity_target_field/identity_source_path for this event's event_type
+        name both (see app.services.event_mapping_resolver and
         docs/prds/0003-event-driven-contact-resolution.md). Auto-creates one from
         contact_field_values if this identity hasn't been seen before.
 

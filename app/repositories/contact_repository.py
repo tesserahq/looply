@@ -199,12 +199,28 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         A contact created this way has no authenticated Looply user
         (created_by_id=None) and no real phone/contact-type data from the event, so
         those get low-commitment placeholders an operator can correct later.
+
+        A contact can predate this identity - created manually, or ingested
+        before the source system attached this external_id - and only collide
+        with the incoming event on email. When identity_field is
+        "external_id" and no contact has that external_id yet, an email
+        collision is checked for and, if found, that contact adopts the
+        external_id instead of racing the unique email constraint on a
+        duplicate insert.
         """
         existing = (
             self.get_contact_by_external_id(identity_value)
             if identity_field == "external_id"
             else self.get_contact_by_email(identity_value)
         )
+        if not existing and identity_field == "external_id":
+            email = contact_field_values.get("email")
+            if email:
+                existing = self.get_contact_by_email(email)
+                if existing and not existing.external_id:
+                    existing.external_id = identity_value
+                    self.db.commit()
+                    self.db.refresh(existing)
         if existing:
             return existing
 

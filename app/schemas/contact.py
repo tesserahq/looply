@@ -50,8 +50,7 @@ class ContactStatusOption(BaseModel):
 
 
 CONTACT_STATUS_OPTIONS: list[ContactStatusOption] = [
-    ContactStatusOption(id=cs.value, name=cs.value.capitalize())
-    for cs in ContactStatus
+    ContactStatusOption(id=cs.value, name=cs.value.capitalize()) for cs in ContactStatus
 ]
 
 

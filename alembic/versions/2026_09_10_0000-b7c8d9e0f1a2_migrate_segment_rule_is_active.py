@@ -55,7 +55,9 @@ def _migrate_node(node, changed):
         changed.append(True)
         return node
     if "conditions" in node:
-        node["conditions"] = [_migrate_node(child, changed) for child in node["conditions"]]
+        node["conditions"] = [
+            _migrate_node(child, changed) for child in node["conditions"]
+        ]
     return node
 
 
@@ -72,14 +74,18 @@ def _unmigrate_node(node, changed):
         changed.append(True)
         return node
     if "conditions" in node:
-        node["conditions"] = [_unmigrate_node(child, changed) for child in node["conditions"]]
+        node["conditions"] = [
+            _unmigrate_node(child, changed) for child in node["conditions"]
+        ]
     return node
 
 
 def upgrade() -> None:
     """Upgrade schema."""
     connection = op.get_bind()
-    rows = connection.execute(sa.select(segments_table.c.id, segments_table.c.rule)).fetchall()
+    rows = connection.execute(
+        sa.select(segments_table.c.id, segments_table.c.rule)
+    ).fetchall()
     for row_id, rule in rows:
         if not isinstance(rule, dict) or "root" not in rule:
             continue
@@ -96,7 +102,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     connection = op.get_bind()
-    rows = connection.execute(sa.select(segments_table.c.id, segments_table.c.rule)).fetchall()
+    rows = connection.execute(
+        sa.select(segments_table.c.id, segments_table.c.rule)
+    ).fetchall()
     for row_id, rule in rows:
         if not isinstance(rule, dict) or "root" not in rule:
             continue

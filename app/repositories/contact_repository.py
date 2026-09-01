@@ -379,4 +379,3 @@ class ContactRepository(SoftDeleteRepository[Contact]):
     def get_contacts_deleted_after(self, date) -> List[Contact]:
         """Get contacts deleted after a specific date."""
         return self.get_records_deleted_after(date)
-

@@ -68,9 +68,7 @@ class EventMapping(Base, TimestampMixin, SoftDeleteMixin):
     # event_type, via the same TagRepository.set_contact_tags write path
     # manual tagging uses. Applied only at creation, same as default_status.
     # Null/empty means no tags are applied.
-    default_tags: Mapped[list[str] | None] = mapped_column(
-        ARRAY(String), nullable=True
-    )
+    default_tags: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
     # Null for host API calls, set to the operator's user id when created through
     # the UI - mirrors EventFieldMapping.created_by_id.
     created_by_id: Mapped[UUID | None] = mapped_column(

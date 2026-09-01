@@ -270,9 +270,7 @@ def test_search_contacts_by_contact_type(db, test_contact):
     assert any(contact.id == test_contact.id for contact in results)
 
 
-def test_get_or_create_from_event_applies_default_status_and_tags_on_create(
-    db, faker
-):
+def test_get_or_create_from_event_applies_default_status_and_tags_on_create(db, faker):
     """A new contact auto-created from an event gets the EventMapping's
     default_status/default_tags stamped on it."""
     contact_repository = ContactRepository(db)

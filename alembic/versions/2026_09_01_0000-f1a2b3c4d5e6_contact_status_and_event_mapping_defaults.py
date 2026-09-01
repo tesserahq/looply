@@ -43,9 +43,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "event_mappings",
-        sa.Column(
-            "default_tags", postgresql.ARRAY(sa.String()), nullable=True
-        ),
+        sa.Column("default_tags", postgresql.ARRAY(sa.String()), nullable=True),
     )
 
 

@@ -129,9 +129,7 @@ STRING_FIELD_OPS = frozenset(
 # status is a fixed enum (ContactStatus), not free text - ILIKE doesn't apply,
 # but IN is genuinely useful (e.g. "active or pending" for a re-engagement
 # segment) so it gets EQ/NEQ/IN rather than reusing STRING_FIELD_OPS wholesale.
-STATUS_FIELD_OPS = frozenset(
-    {ContactFieldOp.EQ, ContactFieldOp.NEQ, ContactFieldOp.IN}
-)
+STATUS_FIELD_OPS = frozenset({ContactFieldOp.EQ, ContactFieldOp.NEQ, ContactFieldOp.IN})
 
 # Deliberately an explicit per-field allow-list, not `frozenset(ContactFieldOp)` -
 # so a future operator added to the shared enum doesn't silently become

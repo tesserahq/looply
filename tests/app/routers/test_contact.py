@@ -591,3 +591,18 @@ class TestContactTypesRouter:
             "lead",
         }
         assert all(item["name"] == item["id"].capitalize() for item in data["items"])
+
+
+class TestContactStatusesRouter:
+    """Test class for GET /contacts/contact-statuses."""
+
+    def test_list_contact_statuses(self, client):
+        """Returns all three fixed contact statuses as paginated {id, name} pairs."""
+        response = client.get("/contacts/contact-statuses")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["total"] == 3
+        ids = {item["id"] for item in data["items"]}
+        assert ids == {"active", "inactive", "pending"}
+        assert all(item["name"] == item["id"].capitalize() for item in data["items"])

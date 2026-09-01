@@ -13,6 +13,8 @@ from app.schemas.contact import (
     ContactUpdate,
     ContactTypeOption,
     CONTACT_TYPE_OPTIONS,
+    ContactStatusOption,
+    CONTACT_STATUS_OPTIONS,
 )
 from app.repositories.contact_repository import ContactRepository
 from app.repositories.contact_list_repository import ContactListRepository
@@ -130,6 +132,16 @@ def list_contact_types(
 ):
     """List the fixed set of contact types available to assign to a contact."""
     return paginate_sequence(CONTACT_TYPE_OPTIONS)
+
+
+@router.get("/contact-statuses", response_model=Page[ContactStatusOption])
+def list_contact_statuses(
+    _authorized: bool = Depends(rbac["read"]),
+):
+    """List the fixed set of lifecycle statuses (active/inactive/pending)
+    available to assign to a contact. See
+    docs/prds/0005-contact-status-and-event-mapping-defaults.md."""
+    return paginate_sequence(CONTACT_STATUS_OPTIONS)
 
 
 @router.get("/{contact_id}", response_model=ContactWithLists)

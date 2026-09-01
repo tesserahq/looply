@@ -41,6 +41,19 @@ class ContactStatus(str, Enum):
     PENDING = "pending"
 
 
+class ContactStatusOption(BaseModel):
+    """A single selectable contact status, for the contact-statuses listing
+    endpoint (mirrors ContactTypeOption/CONTACT_TYPE_OPTIONS)."""
+
+    id: str
+    name: str
+
+
+CONTACT_STATUS_OPTIONS: list[ContactStatusOption] = [
+    ContactStatusOption(id=cs.value, name=cs.value.capitalize()) for cs in ContactStatus
+]
+
+
 class ContactBase(BaseModel):
     """Base contact model containing common contact attributes."""
 

@@ -178,7 +178,9 @@ def test_list_campaign_recipients_not_found(client_test_user: TestClient):
     assert response.status_code == 404
 
 
-def test_get_campaign_stats(client_test_user: TestClient, draft_campaign, test_contact, db):
+def test_get_campaign_stats(
+    client_test_user: TestClient, draft_campaign, test_contact, db
+):
     from app.repositories.campaign_repository import CampaignRepository
 
     CampaignRepository(db).mark_sending(

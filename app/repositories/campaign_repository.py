@@ -488,9 +488,7 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
             return CampaignEngagementTimeline(buckets=buckets)
 
         rows = (
-            self.db.query(
-                CampaignRecipient.opened_at, CampaignRecipient.clicked_at
-            )
+            self.db.query(CampaignRecipient.opened_at, CampaignRecipient.clicked_at)
             .filter(
                 CampaignRecipient.campaign_id == campaign.id,
                 (CampaignRecipient.opened_at.isnot(None))

@@ -28,7 +28,9 @@ def test_create_event_mapping_with_identity(client_test_user, faker):
     assert data["identity_source_path"] == "person.id"
 
 
-def test_create_event_mapping_identity_fields_must_be_set_together(client_test_user, faker):
+def test_create_event_mapping_identity_fields_must_be_set_together(
+    client_test_user, faker
+):
     payload = {
         "event_type": f"com.mylinden.{faker.unique.slug()}",
         "identity_target_field": "external_id",
@@ -153,7 +155,9 @@ def test_create_event_field_mapping(
     assert data["created_by_id"] is not None
 
 
-def test_create_event_field_mapping_undefined_field(client_test_user, test_event_mapping):
+def test_create_event_field_mapping_undefined_field(
+    client_test_user, test_event_mapping
+):
     payload = {
         "source_path": "account.family_member_count",
         "field_name": "does-not-exist",
@@ -277,7 +281,9 @@ def test_delete_event_field_mapping(
     )
     assert response.status_code == 204
 
-    list_response = client_test_user.get(f"/event-mappings/{test_event_mapping.id}/fields")
+    list_response = client_test_user.get(
+        f"/event-mappings/{test_event_mapping.id}/fields"
+    )
     ids = [item["id"] for item in list_response.json()["items"]]
     assert str(test_event_field_mapping.id) not in ids
 

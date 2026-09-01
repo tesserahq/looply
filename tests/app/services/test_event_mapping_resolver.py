@@ -110,9 +110,7 @@ def test_identity_missing_path_leaves_no_identity():
 def test_no_identity_configured_leaves_no_identity():
     field_mapping = _custom_field_mapping("person.name", "some_field")
 
-    result = resolve(
-        _no_identity(), [field_mapping], {"person": {"name": "Harry"}}
-    )
+    result = resolve(_no_identity(), [field_mapping], {"person": {"name": "Harry"}})
 
     assert result.has_identity is False
 

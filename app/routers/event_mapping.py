@@ -147,7 +147,9 @@ def delete_event_mapping(
         )
 
 
-@nested_router.post("", response_model=EventFieldMapping, status_code=status.HTTP_201_CREATED)
+@nested_router.post(
+    "", response_model=EventFieldMapping, status_code=status.HTTP_201_CREATED
+)
 def create_event_field_mapping(
     mapping_data: EventFieldMappingCreateRequest,
     event_mapping: EventMappingModel = Depends(get_event_mapping_by_id),

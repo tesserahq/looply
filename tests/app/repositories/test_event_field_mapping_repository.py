@@ -9,7 +9,9 @@ from app.schemas.event_field_mapping import (
 import pytest
 
 
-def test_create_mapping(db, test_event_mapping, test_custom_field_definition, test_user):
+def test_create_mapping(
+    db, test_event_mapping, test_custom_field_definition, test_user
+):
     repository = EventFieldMappingRepository(db)
     mapping = repository.create_mapping(
         EventFieldMappingCreate(
@@ -191,6 +193,5 @@ def test_update_mapping_not_found(db):
     from uuid import uuid4
 
     assert (
-        EventFieldMappingRepository(db).update_mapping(uuid4(), source_path="x")
-        is None
+        EventFieldMappingRepository(db).update_mapping(uuid4(), source_path="x") is None
     )

@@ -3,7 +3,9 @@ from app.models.event_field_mapping import EventFieldMapping
 
 
 @pytest.fixture(scope="function")
-def test_event_field_mapping(db, test_event_mapping, test_number_field_definition, test_user):
+def test_event_field_mapping(
+    db, test_event_mapping, test_number_field_definition, test_user
+):
     """Create an attribute mapping under test_event_mapping targeting
     test_number_field_definition."""
     mapping = EventFieldMapping(

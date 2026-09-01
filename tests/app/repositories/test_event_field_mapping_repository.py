@@ -1,5 +1,4 @@
 from app.repositories.event_field_mapping_repository import (
-    DuplicateIdentityKeyError,
     EventFieldMappingRepository,
     InvalidEventFieldMappingError,
 )
@@ -10,11 +9,13 @@ from app.schemas.event_field_mapping import (
 import pytest
 
 
-def test_create_mapping(db, test_custom_field_definition, test_user):
+def test_create_mapping(
+    db, test_event_mapping, test_custom_field_definition, test_user
+):
     repository = EventFieldMappingRepository(db)
     mapping = repository.create_mapping(
         EventFieldMappingCreate(
-            event_type="com.mylinden.person.created",
+            event_mapping_id=test_event_mapping.id,
             source_path="account.family_member_count",
             field_definition_id=test_custom_field_definition.id,
             created_by_id=test_user.id,
@@ -25,42 +26,57 @@ def test_create_mapping(db, test_custom_field_definition, test_user):
     assert mapping.field_name == test_custom_field_definition.name
 
 
-def test_get_mappings_for_event_type(db, test_custom_field_definition, test_user):
+def test_get_mappings_for_event_mapping(
+    db, test_event_mapping, test_custom_field_definition, test_user
+):
     repository = EventFieldMappingRepository(db)
     repository.create_mapping(
         EventFieldMappingCreate(
-            event_type="com.mylinden.person.created",
+            event_mapping_id=test_event_mapping.id,
             source_path="a",
             field_definition_id=test_custom_field_definition.id,
             created_by_id=test_user.id,
         )
     )
+
+    from app.models.event_mapping import EventMapping
+
+    other_event_mapping = EventMapping(
+        event_type="com.mylinden.pet.created", created_by_id=test_user.id
+    )
+    db.add(other_event_mapping)
+    db.commit()
+    db.refresh(other_event_mapping)
     repository.create_mapping(
         EventFieldMappingCreate(
-            event_type="com.mylinden.pet.created",
+            event_mapping_id=other_event_mapping.id,
             source_path="b",
             field_definition_id=test_custom_field_definition.id,
             created_by_id=test_user.id,
         )
     )
 
-    matches = repository.get_mappings_for_event_type("com.mylinden.person.created")
+    matches = repository.get_mappings_for_event_mapping(test_event_mapping.id)
     assert len(matches) == 1
     assert matches[0].source_path == "a"
 
 
-def test_get_mappings_for_event_type_no_match(db):
+def test_get_mappings_for_event_mapping_no_match(db, test_event_mapping):
     assert (
-        EventFieldMappingRepository(db).get_mappings_for_event_type("no.such.type")
+        EventFieldMappingRepository(db).get_mappings_for_event_mapping(
+            test_event_mapping.id
+        )
         == []
     )
 
 
-def test_delete_mapping_stops_it_matching(db, test_custom_field_definition, test_user):
+def test_delete_mapping_stops_it_matching(
+    db, test_event_mapping, test_custom_field_definition, test_user
+):
     repository = EventFieldMappingRepository(db)
     mapping = repository.create_mapping(
         EventFieldMappingCreate(
-            event_type="com.mylinden.person.created",
+            event_mapping_id=test_event_mapping.id,
             source_path="a",
             field_definition_id=test_custom_field_definition.id,
             created_by_id=test_user.id,
@@ -68,7 +84,7 @@ def test_delete_mapping_stops_it_matching(db, test_custom_field_definition, test
     )
 
     assert repository.delete_mapping(mapping.id) is True
-    assert repository.get_mappings_for_event_type("com.mylinden.person.created") == []
+    assert repository.get_mappings_for_event_mapping(test_event_mapping.id) == []
 
 
 def test_delete_mapping_not_found(db):
@@ -77,11 +93,11 @@ def test_delete_mapping_not_found(db):
     assert EventFieldMappingRepository(db).delete_mapping(uuid4()) is False
 
 
-def test_create_contact_field_mapping(db, test_user):
+def test_create_contact_field_mapping(db, test_event_mapping, test_user):
     repository = EventFieldMappingRepository(db)
     mapping = repository.create_mapping(
         EventFieldMappingCreate(
-            event_type="com.mylinden.person.updated",
+            event_mapping_id=test_event_mapping.id,
             source_path="person.first_name",
             target_type=EventFieldMappingTargetType.CONTACT_FIELD,
             target_field="first_name",
@@ -95,12 +111,14 @@ def test_create_contact_field_mapping(db, test_user):
     assert mapping.field_name is None
 
 
-def test_create_contact_field_mapping_unrecognized_target_field(db, test_user):
+def test_create_contact_field_mapping_unrecognized_target_field(
+    db, test_event_mapping, test_user
+):
     repository = EventFieldMappingRepository(db)
     with pytest.raises(InvalidEventFieldMappingError):
         repository.create_mapping(
             EventFieldMappingCreate(
-                event_type="com.mylinden.person.updated",
+                event_mapping_id=test_event_mapping.id,
                 source_path="person.something",
                 target_type=EventFieldMappingTargetType.CONTACT_FIELD,
                 target_field="not_a_real_column",
@@ -109,85 +127,71 @@ def test_create_contact_field_mapping_unrecognized_target_field(db, test_user):
         )
 
 
-def test_create_identity_key_mapping(db, test_user):
+def test_update_mapping_source_path(
+    db, test_event_mapping, test_custom_field_definition, test_user
+):
     repository = EventFieldMappingRepository(db)
     mapping = repository.create_mapping(
         EventFieldMappingCreate(
-            event_type="com.mylinden.person.updated",
-            source_path="person.id",
-            target_type=EventFieldMappingTargetType.CONTACT_FIELD,
-            target_field="external_id",
-            is_identity_key=True,
+            event_mapping_id=test_event_mapping.id,
+            source_path="a",
+            field_definition_id=test_custom_field_definition.id,
             created_by_id=test_user.id,
         )
     )
 
-    assert mapping.is_identity_key is True
+    updated = repository.update_mapping(mapping.id, source_path="b")
+
+    assert updated.source_path == "b"
+    assert updated.field_definition_id == test_custom_field_definition.id
 
 
-def test_create_identity_key_mapping_on_non_identity_field_rejected(db, test_user):
+def test_update_mapping_switch_to_contact_field(
+    db, test_event_mapping, test_custom_field_definition, test_user
+):
     repository = EventFieldMappingRepository(db)
+    mapping = repository.create_mapping(
+        EventFieldMappingCreate(
+            event_mapping_id=test_event_mapping.id,
+            source_path="a",
+            field_definition_id=test_custom_field_definition.id,
+            created_by_id=test_user.id,
+        )
+    )
+
+    updated = repository.update_mapping(
+        mapping.id,
+        target_type=EventFieldMappingTargetType.CONTACT_FIELD,
+        target_field="city",
+        clear_field_definition_id=True,
+    )
+
+    assert updated.target_type == "contact_field"
+    assert updated.target_field == "city"
+    assert updated.field_definition_id is None
+
+
+def test_update_mapping_unrecognized_target_field_rejected(
+    db, test_event_mapping, test_user
+):
+    repository = EventFieldMappingRepository(db)
+    mapping = repository.create_mapping(
+        EventFieldMappingCreate(
+            event_mapping_id=test_event_mapping.id,
+            source_path="a",
+            target_type=EventFieldMappingTargetType.CONTACT_FIELD,
+            target_field="city",
+            created_by_id=test_user.id,
+        )
+    )
+
     with pytest.raises(InvalidEventFieldMappingError):
-        repository.create_mapping(
-            EventFieldMappingCreate(
-                event_type="com.mylinden.person.updated",
-                source_path="person.first_name",
-                target_type=EventFieldMappingTargetType.CONTACT_FIELD,
-                target_field="first_name",
-                is_identity_key=True,
-                created_by_id=test_user.id,
-            )
-        )
+        repository.update_mapping(mapping.id, target_field="not_a_real_column")
 
 
-def test_create_second_identity_key_mapping_for_same_event_type_rejected(db, test_user):
-    repository = EventFieldMappingRepository(db)
-    repository.create_mapping(
-        EventFieldMappingCreate(
-            event_type="com.mylinden.person.updated",
-            source_path="person.id",
-            target_type=EventFieldMappingTargetType.CONTACT_FIELD,
-            target_field="external_id",
-            is_identity_key=True,
-            created_by_id=test_user.id,
-        )
+def test_update_mapping_not_found(db):
+    from uuid import uuid4
+
+    assert (
+        EventFieldMappingRepository(db).update_mapping(uuid4(), source_path="x") is None
     )
-
-    with pytest.raises(DuplicateIdentityKeyError):
-        repository.create_mapping(
-            EventFieldMappingCreate(
-                event_type="com.mylinden.person.updated",
-                source_path="person.other_id",
-                target_type=EventFieldMappingTargetType.CONTACT_FIELD,
-                target_field="email",
-                is_identity_key=True,
-                created_by_id=test_user.id,
-            )
-        )
-
-
-def test_identity_key_mapping_allowed_for_different_event_types(db, test_user):
-    repository = EventFieldMappingRepository(db)
-    repository.create_mapping(
-        EventFieldMappingCreate(
-            event_type="com.mylinden.person.updated",
-            source_path="person.id",
-            target_type=EventFieldMappingTargetType.CONTACT_FIELD,
-            target_field="external_id",
-            is_identity_key=True,
-            created_by_id=test_user.id,
-        )
-    )
-
-    second = repository.create_mapping(
-        EventFieldMappingCreate(
-            event_type="com.mylinden.pet.created",
-            source_path="owner.id",
-            target_type=EventFieldMappingTargetType.CONTACT_FIELD,
-            target_field="external_id",
-            is_identity_key=True,
-            created_by_id=test_user.id,
-        )
-    )
-
-    assert second.is_identity_key is True

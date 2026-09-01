@@ -101,7 +101,7 @@ class ContactBase(BaseModel):
 
     source: Optional[str] = None
     """Provenance: "manual", "website", "phone", or an event-derived value stamped
-    from TrackedEventType.source. Unset for contacts that predate this field."""
+    from EventMapping.source. Unset for contacts that predate this field."""
 
     created_by_id: UUID
     """ID of the user who created this contact. Required field."""

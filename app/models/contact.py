@@ -40,8 +40,9 @@ class Contact(Base, TimestampMixin, SoftDeleteMixin):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Free-form provenance: "manual", "website", "phone", or an event-derived value
-    # stamped from TrackedEventType.source at auto-create time (see
-    # docs/prds/0003-event-driven-contact-resolution.md). Nullable: existing
+    # stamped from EventMapping.source at auto-create time (see
+    # docs/prds/0003-event-driven-contact-resolution.md and
+    # docs/prds/0004-event-mapping-consolidation.md). Nullable: existing
     # contacts predate this column and have unknown provenance.
     source: Mapped[str | None] = mapped_column(String, nullable=True)
     # Nullable: a contact auto-created from an ingested NATS event (see

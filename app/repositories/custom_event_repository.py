@@ -57,7 +57,7 @@ class CustomEventRepository:
         """Get a query for all events, most recent first, optionally filtered by
         name and/or contact_id - for pagination. Global (not contact-scoped) view:
         confirming NATS ingestion is actually flowing, and discovering what
-        event_types have been seen (e.g. to populate a TrackedEventType or
+        event_types have been seen (e.g. to populate an EventMapping or
         EventFieldMapping picker) both require looking across all contacts, not
         just one."""
         query = self.db.query(CustomEvent)

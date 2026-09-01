@@ -2,6 +2,8 @@
 way orcha's process_nats_event_task tests do, no live NATS connection needed.
 """
 
+from app.models.event_field_mapping import EventFieldMapping
+from app.models.event_mapping import EventMapping
 from app.repositories.contact_custom_field_value_repository import (
     ContactCustomFieldValueRepository,
 )
@@ -41,7 +43,7 @@ def _envelope(**overrides):
 
 
 def test_untracked_event_type_is_dropped(db):
-    """No TrackedEventType is registered for "com.mylinden.person.updated" here -
+    """No EventMapping is registered for "com.mylinden.person.updated" here -
     the event must be dropped before any Contact resolution is attempted."""
     envelope = _envelope()
 
@@ -53,10 +55,16 @@ def test_untracked_event_type_is_dropped(db):
     )
 
 
-def test_no_identity_key_mapping_is_dropped(db, test_tracked_event_type):
-    """Tracked, but nobody has configured an identity-key mapping for this
-    event_type yet - must be dropped, same fail-safe behavior as an unresolved
-    path, not a crash."""
+def test_no_identity_configured_is_dropped(db, test_event_mapping, test_user):
+    """test_event_mapping registers "com.mylinden.person.created", not
+    "com.mylinden.person.updated" - register the right event_type with no
+    identity configured to hit this case."""
+    unidentified = EventMapping(
+        event_type="com.mylinden.person.updated", created_by_id=test_user.id
+    )
+    db.add(unidentified)
+    db.commit()
+
     envelope = _envelope()
 
     event_id = _process_nats_event(db, envelope)
@@ -65,7 +73,7 @@ def test_no_identity_key_mapping_is_dropped(db, test_tracked_event_type):
 
 
 def test_known_external_id_records_event_without_modifying_identity(
-    db, test_contact, test_tracked_event_type, test_identity_key_mapping
+    db, test_contact, test_identity_event_mapping
 ):
     test_contact.external_id = "person-external-id"
     original_email = test_contact.email
@@ -95,7 +103,7 @@ def test_known_external_id_records_event_without_modifying_identity(
 
 
 def test_unknown_external_id_auto_creates_contact_from_person_not_user(
-    db, test_tracked_event_type, test_identity_key_mapping
+    db, test_identity_event_mapping
 ):
     """The identity key targets event_data.person.id, not event_data.user.id -
     regression test for the "10 family members collapse onto one user" bug this
@@ -113,17 +121,15 @@ def test_unknown_external_id_auto_creates_contact_from_person_not_user(
     assert len(events) == 1
 
 
-def test_auto_created_contact_stamped_with_tracked_event_type_source(
-    db, test_user, test_identity_key_mapping
-):
-    from app.models.tracked_event_type import TrackedEventType
-
-    tracked = TrackedEventType(
+def test_auto_created_contact_stamped_with_event_mapping_source(db, test_user):
+    event_mapping = EventMapping(
         event_type="com.mylinden.person.updated",
         source="linden",
+        identity_target_field="external_id",
+        identity_source_path="person.id",
         created_by_id=test_user.id,
     )
-    db.add(tracked)
+    db.add(event_mapping)
     db.commit()
 
     envelope = _envelope()
@@ -136,22 +142,11 @@ def test_auto_created_contact_stamped_with_tracked_event_type_source(
 def test_email_identity_key_resolves_by_email(db, test_user):
     """A different event_type configured to key off email instead of
     external_id resolves/creates via Contact.email."""
-    from app.models.tracked_event_type import TrackedEventType
-    from app.models.event_field_mapping import EventFieldMapping
-
     db.add(
-        TrackedEventType(
+        EventMapping(
             event_type="com.mylinden.pet.created",
-            created_by_id=test_user.id,
-        )
-    )
-    db.add(
-        EventFieldMapping(
-            event_type="com.mylinden.pet.created",
-            source_path="owner.email",
-            target_type="contact_field",
-            target_field="email",
-            is_identity_key=True,
+            identity_target_field="email",
+            identity_source_path="owner.email",
             created_by_id=test_user.id,
         )
     )
@@ -169,9 +164,7 @@ def test_email_identity_key_resolves_by_email(db, test_user):
     assert contact is not None
 
 
-def test_raw_envelope_stored_verbatim(
-    db, test_tracked_event_type, test_identity_key_mapping
-):
+def test_raw_envelope_stored_verbatim(db, test_identity_event_mapping):
     envelope = _envelope()
 
     _process_nats_event(db, envelope)
@@ -181,9 +174,7 @@ def test_raw_envelope_stored_verbatim(
     assert events[0].raw_envelope == envelope
 
 
-def test_identity_key_path_not_resolving_is_dropped(
-    db, test_tracked_event_type, test_identity_key_mapping
-):
+def test_identity_path_not_resolving_is_dropped(db, test_identity_event_mapping):
     envelope = _envelope(event_data={"person": {}})
 
     event_id = _process_nats_event(db, envelope)
@@ -192,23 +183,11 @@ def test_identity_key_path_not_resolving_is_dropped(
 
 
 def test_contact_field_mapping_populates_contact_attribute(
-    db, test_tracked_event_type, test_user
+    db, test_identity_event_mapping, test_user
 ):
-    from app.models.event_field_mapping import EventFieldMapping
-
     db.add(
         EventFieldMapping(
-            event_type="com.mylinden.person.updated",
-            source_path="person.id",
-            target_type="contact_field",
-            target_field="external_id",
-            is_identity_key=True,
-            created_by_id=test_user.id,
-        )
-    )
-    db.add(
-        EventFieldMapping(
-            event_type="com.mylinden.person.updated",
+            event_mapping_id=test_identity_event_mapping.id,
             source_path="person.first_name",
             target_type="contact_field",
             target_field="first_name",
@@ -229,14 +208,13 @@ def test_contact_field_mapping_populates_contact_attribute(
 
 def test_matching_custom_field_mapping_writes_custom_field(
     db,
-    test_tracked_event_type,
-    test_identity_key_mapping,
+    test_identity_event_mapping,
     test_number_field_definition,
     test_user,
 ):
     EventFieldMappingRepository(db).create_mapping(
         EventFieldMappingCreate(
-            event_type="com.mylinden.person.updated",
+            event_mapping_id=test_identity_event_mapping.id,
             source_path="person.account.family_member_count",
             field_definition_id=test_number_field_definition.id,
             created_by_id=test_user.id,
@@ -264,14 +242,13 @@ def test_matching_custom_field_mapping_writes_custom_field(
 
 def test_custom_field_mapping_with_missing_path_is_skipped(
     db,
-    test_tracked_event_type,
-    test_identity_key_mapping,
+    test_identity_event_mapping,
     test_number_field_definition,
     test_user,
 ):
     EventFieldMappingRepository(db).create_mapping(
         EventFieldMappingCreate(
-            event_type="com.mylinden.person.updated",
+            event_mapping_id=test_identity_event_mapping.id,
             source_path="person.does.not.exist",
             field_definition_id=test_number_field_definition.id,
             created_by_id=test_user.id,
@@ -293,8 +270,7 @@ def test_custom_field_mapping_with_missing_path_is_skipped(
 
 def test_custom_field_mapping_with_type_mismatch_is_skipped_but_event_still_recorded(
     db,
-    test_tracked_event_type,
-    test_identity_key_mapping,
+    test_identity_event_mapping,
     test_number_field_definition,
     test_user,
 ):
@@ -302,7 +278,7 @@ def test_custom_field_mapping_with_type_mismatch_is_skipped_but_event_still_reco
     but that failure must not roll back the CustomEvent."""
     EventFieldMappingRepository(db).create_mapping(
         EventFieldMappingCreate(
-            event_type="com.mylinden.person.updated",
+            event_mapping_id=test_identity_event_mapping.id,
             source_path="person.name",
             field_definition_id=test_number_field_definition.id,
             created_by_id=test_user.id,
@@ -326,9 +302,7 @@ def test_custom_field_mapping_with_type_mismatch_is_skipped_but_event_still_reco
     assert len(events) == 1
 
 
-def test_no_matching_mapping_is_a_noop(
-    db, test_tracked_event_type, test_identity_key_mapping
-):
+def test_no_matching_mapping_is_a_noop(db, test_identity_event_mapping):
     envelope = _envelope()
 
     event_id = _process_nats_event(db, envelope)

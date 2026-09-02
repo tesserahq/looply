@@ -1,3 +1,4 @@
+import re
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
@@ -332,6 +333,37 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         """
         return self.db.query(Contact).filter(Contact.fts.match(search_term)).all()
 
+    def _build_prefix_tsquery(self, search_term: str):
+        """
+        Build a prefix-matching tsquery expression from free-text search input.
+
+        Unlike plainto_tsquery, this matches each word as a *prefix*, so a
+        partial term like "jane" matches both a word starting with "jane"
+        (e.g. a first name "Jane") and a lexeme where "jane" is only a
+        leading substring (e.g. the email "jane@hello.com", which Postgres'
+        text search parser stores as a single "email" lexeme rather than
+        splitting on "@"/"."). Falls back to plainto_tsquery if the input has
+        no word characters (e.g. only punctuation).
+
+        Args:
+            search_term: The raw search text
+
+        Returns:
+            A SQLAlchemy function expression usable with the `@@` operator
+        """
+        # Split on whitespace only (not on punctuation) so multi-part tokens
+        # like "jane@hello.com" stay intact for to_tsquery's own parser to
+        # tokenize as a single email lexeme, matching how the fts column was
+        # built. Strip tsquery-reserved operator characters to avoid syntax
+        # errors from user input.
+        sanitized = re.sub(r"[&|!():']", " ", search_term)
+        words = sanitized.split()
+        if not words:
+            return func.plainto_tsquery("simple_unaccent", search_term)
+
+        prefix_query = " & ".join(f"{word}:*" for word in words)
+        return func.to_tsquery("simple_unaccent", prefix_query)
+
     def search_text(
         self, search_term: str, skip: int = 0, limit: int = 100
     ) -> List[Contact]:
@@ -346,9 +378,7 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         Returns:
             List[Contact]: List of contacts matching the search term
         """
-        # Use plainto_tsquery to convert the search term to a proper tsquery
-        # This handles plain text and converts it to a tsquery that PostgreSQL can understand
-        tsquery = func.plainto_tsquery("simple_unaccent", search_term)
+        tsquery = self._build_prefix_tsquery(search_term)
         return (
             self.db.query(Contact)
             .filter(Contact.fts.op("@@")(tsquery))
@@ -369,7 +399,7 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         Returns:
             Query: SQLAlchemy query object for search results
         """
-        tsquery = func.plainto_tsquery("simple_unaccent", search_term)
+        tsquery = self._build_prefix_tsquery(search_term)
         return (
             self.db.query(Contact)
             .filter(Contact.fts.op("@@")(tsquery))

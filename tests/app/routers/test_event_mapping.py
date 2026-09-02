@@ -89,6 +89,41 @@ def test_update_event_mapping_invalid_identity_target_field(
     assert response.status_code == 422
 
 
+def test_create_event_mapping_defaults_to_active(client_test_user, faker):
+    payload = {"event_type": f"com.mylinden.{faker.unique.slug()}"}
+
+    response = client_test_user.post("/event-mappings", json=payload)
+    assert response.json()["is_active"] is True
+
+
+def test_disable_and_reenable_event_mapping(client_test_user, test_event_mapping):
+    disable_response = client_test_user.patch(
+        f"/event-mappings/{test_event_mapping.id}", json={"is_active": False}
+    )
+    assert disable_response.status_code == 200
+    assert disable_response.json()["is_active"] is False
+
+    enable_response = client_test_user.patch(
+        f"/event-mappings/{test_event_mapping.id}", json={"is_active": True}
+    )
+    assert enable_response.status_code == 200
+    assert enable_response.json()["is_active"] is True
+
+
+def test_clone_event_mapping_from_disabled_source_is_active(
+    client_test_user, test_event_mapping, faker
+):
+    client_test_user.patch(
+        f"/event-mappings/{test_event_mapping.id}", json={"is_active": False}
+    )
+
+    response = client_test_user.post(
+        f"/event-mappings/{test_event_mapping.id}/clone",
+        json={"event_type": f"com.mylinden.{faker.unique.slug()}"},
+    )
+    assert response.json()["is_active"] is True
+
+
 def test_clone_event_mapping(client_test_user, test_identity_event_mapping, faker):
     new_event_type = f"com.mylinden.{faker.unique.slug()}"
 

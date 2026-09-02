@@ -71,6 +71,10 @@ class EventMappingUpdateRequest(BaseModel):
     identity_source_path: Optional[str] = None
     default_status: Optional[ContactStatus] = None
     default_tags: Optional[list[str]] = None
+    is_active: Optional[bool] = None
+    """Pause (false) or resume (true) ingestion for this event_type without
+    soft-deleting the row - event_type stays reserved and every field mapping
+    is left untouched, unlike delete. Omit to leave unchanged."""
 
     @model_validator(mode="after")
     def _validate_identity_shape(self) -> "EventMappingUpdateRequest":
@@ -104,6 +108,7 @@ class EventMapping(BaseModel):
     identity_source_path: Optional[str] = None
     default_status: Optional[str] = None
     default_tags: Optional[list[str]] = None
+    is_active: bool = True
     created_by_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime

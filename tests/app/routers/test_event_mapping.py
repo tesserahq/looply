@@ -89,6 +89,65 @@ def test_update_event_mapping_invalid_identity_target_field(
     assert response.status_code == 422
 
 
+def test_clone_event_mapping(client_test_user, test_identity_event_mapping, faker):
+    new_event_type = f"com.mylinden.{faker.unique.slug()}"
+
+    response = client_test_user.post(
+        f"/event-mappings/{test_identity_event_mapping.id}/clone",
+        json={"event_type": new_event_type},
+    )
+    assert response.status_code == 201
+
+    data = response.json()
+    assert data["id"] != str(test_identity_event_mapping.id)
+    assert data["event_type"] == new_event_type
+    assert (
+        data["identity_target_field"]
+        == test_identity_event_mapping.identity_target_field
+    )
+    assert (
+        data["identity_source_path"] == test_identity_event_mapping.identity_source_path
+    )
+    assert data["created_by_id"] is not None
+
+    fields_response = client_test_user.get(f"/event-mappings/{data['id']}/fields")
+    assert fields_response.json()["total"] == 0
+
+
+def test_clone_event_mapping_deep_copies_field_mappings(
+    client_test_user, test_event_mapping, test_event_field_mapping, faker
+):
+    new_event_type = f"com.mylinden.{faker.unique.slug()}"
+
+    response = client_test_user.post(
+        f"/event-mappings/{test_event_mapping.id}/clone",
+        json={"event_type": new_event_type},
+    )
+    clone_id = response.json()["id"]
+
+    fields_response = client_test_user.get(f"/event-mappings/{clone_id}/fields")
+    items = fields_response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["id"] != str(test_event_field_mapping.id)
+    assert items[0]["source_path"] == test_event_field_mapping.source_path
+
+
+def test_clone_event_mapping_duplicate_conflict(client_test_user, test_event_mapping):
+    response = client_test_user.post(
+        f"/event-mappings/{test_event_mapping.id}/clone",
+        json={"event_type": test_event_mapping.event_type},
+    )
+    assert response.status_code == 409
+
+
+def test_clone_event_mapping_not_found(client_test_user, faker):
+    response = client_test_user.post(
+        f"/event-mappings/{uuid4()}/clone",
+        json={"event_type": f"com.mylinden.{faker.unique.slug()}"},
+    )
+    assert response.status_code == 404
+
+
 def test_delete_event_mapping(client_test_user, test_event_mapping):
     response = client_test_user.delete(f"/event-mappings/{test_event_mapping.id}")
     assert response.status_code == 204

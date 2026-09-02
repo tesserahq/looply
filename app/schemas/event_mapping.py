@@ -50,6 +50,18 @@ class EventMappingCreateRequest(BaseModel):
         return self
 
 
+class EventMappingCloneRequest(BaseModel):
+    """Schema for cloning an existing event mapping under a new event_type.
+    Every other field (source, identity configuration, defaults, and all active
+    field mappings) is copied verbatim from the source - only event_type is
+    supplied here."""
+
+    event_type: str
+    """Exact-match event_type to register the clone under (e.g.
+    "com.mylinden.person.updated" when cloning "com.mylinden.person.created").
+    Unique across the deployment (active rows only), same as on create."""
+
+
 class EventMappingUpdateRequest(BaseModel):
     """Schema for updating an existing event mapping's source/identity
     configuration in place. All fields optional; only provided fields change."""

@@ -9,6 +9,7 @@ from app.models.event_mapping import EventMapping as EventMappingModel
 from app.models.event_field_mapping import EventFieldMapping as EventFieldMappingModel
 from app.schemas.event_mapping import (
     EventMapping,
+    EventMappingCloneRequest,
     EventMappingCreate,
     EventMappingCreateRequest,
     EventMappingUpdateRequest,
@@ -129,6 +130,30 @@ def update_event_mapping(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
         )
+
+
+@router.post(
+    "/{event_mapping_id}/clone",
+    response_model=EventMapping,
+    status_code=status.HTTP_201_CREATED,
+)
+def clone_event_mapping(
+    clone_data: EventMappingCloneRequest,
+    event_mapping: EventMappingModel = Depends(get_event_mapping_by_id),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["create"]),
+):
+    """Clone an event mapping under a new event_type: copies source, identity
+    configuration, defaults, and every active field mapping verbatim. Useful
+    for near-identical sibling events (e.g. com.mylinden.contact.created and
+    .updated) that would otherwise need their field mappings defined twice."""
+    try:
+        return EventMappingRepository(db).clone_event_mapping(
+            event_mapping, clone_data.event_type, current_user.id
+        )
+    except EventMappingConflictError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 @router.delete("/{event_mapping_id}", status_code=status.HTTP_204_NO_CONTENT)

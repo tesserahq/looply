@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -114,6 +114,60 @@ class EventMappingRepository(SoftDeleteRepository[EventMapping]):
         _validate_identity_target_field(db_event_mapping.identity_target_field)
 
         self.db.commit()
+        self.db.refresh(db_event_mapping)
+        return db_event_mapping
+
+    def clone_event_mapping(
+        self,
+        source: EventMapping,
+        event_type: str,
+        created_by_id: Optional[UUID],
+    ) -> EventMapping:
+        """Clone an EventMapping under a new event_type: copies source,
+        identity configuration, defaults, and every active EventFieldMapping
+        child as new, independent rows - editing the clone never affects
+        source. Everything but event_type is copied verbatim; the caller
+        supplies the new event_type since it's the only thing that must differ.
+
+        Raises:
+            EventMappingConflictError: event_type is already registered by
+                another active row.
+        """
+        # Read before adding the clone below - accessing this lazy relationship
+        # after that add() would autoflush the pending insert mid-loop, raising
+        # IntegrityError outside the try/except that's meant to catch it.
+        source_field_mappings = list(source.field_mappings)
+
+        db_event_mapping = EventMapping(
+            id=uuid4(),
+            event_type=event_type,
+            source=source.source,
+            identity_target_field=source.identity_target_field,
+            identity_source_path=source.identity_source_path,
+            default_status=source.default_status,
+            default_tags=source.default_tags,
+            created_by_id=created_by_id,
+        )
+        self.db.add(db_event_mapping)
+        for field_mapping in source_field_mappings:
+            self.db.add(
+                EventFieldMapping(
+                    event_mapping_id=db_event_mapping.id,
+                    source_path=field_mapping.source_path,
+                    target_type=field_mapping.target_type,
+                    target_field=field_mapping.target_field,
+                    field_definition_id=field_mapping.field_definition_id,
+                    created_by_id=created_by_id,
+                )
+            )
+
+        try:
+            self.db.commit()
+        except IntegrityError as e:
+            self.db.rollback()
+            raise EventMappingConflictError(
+                f"Event type {event_type!r} is already registered"
+            ) from e
         self.db.refresh(db_event_mapping)
         return db_event_mapping
 

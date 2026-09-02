@@ -171,6 +171,55 @@ def test_delete_event_mapping_cascades_to_field_mappings(
     assert field_repo.get_mapping(mapping.id) is None
 
 
+def test_clone_event_mapping(db, test_identity_event_mapping, test_user):
+    repository = EventMappingRepository(db)
+    clone = repository.clone_event_mapping(
+        test_identity_event_mapping, "com.mylinden.person.deleted", test_user.id
+    )
+
+    assert clone.id != test_identity_event_mapping.id
+    assert clone.event_type == "com.mylinden.person.deleted"
+    assert clone.identity_target_field == "external_id"
+    assert clone.identity_source_path == "person.id"
+    assert clone.created_by_id == test_user.id
+
+
+def test_clone_event_mapping_deep_copies_field_mappings(
+    db, test_event_mapping, test_event_field_mapping, test_user
+):
+    repository = EventMappingRepository(db)
+    clone = repository.clone_event_mapping(
+        test_event_mapping, "com.mylinden.person.deleted", test_user.id
+    )
+
+    field_repo = EventFieldMappingRepository(db)
+    cloned_fields = field_repo.get_mappings_for_event_mapping(clone.id)
+
+    assert len(cloned_fields) == 1
+    cloned_field = cloned_fields[0]
+    assert cloned_field.id != test_event_field_mapping.id
+    assert cloned_field.source_path == test_event_field_mapping.source_path
+    assert cloned_field.target_type == test_event_field_mapping.target_type
+    assert (
+        cloned_field.field_definition_id == test_event_field_mapping.field_definition_id
+    )
+    assert cloned_field.created_by_id == test_user.id
+
+    # editing the clone's field mapping leaves the source untouched
+    field_repo.update_mapping(cloned_field.id, source_path="changed.path")
+    assert field_repo.get_mapping(test_event_field_mapping.id).source_path == (
+        test_event_field_mapping.source_path
+    )
+
+
+def test_clone_event_mapping_duplicate_conflict(db, test_event_mapping, test_user):
+    repository = EventMappingRepository(db)
+    with pytest.raises(EventMappingConflictError):
+        repository.clone_event_mapping(
+            test_event_mapping, test_event_mapping.event_type, test_user.id
+        )
+
+
 def test_delete_then_recreate_same_event_type(db, test_user):
     repository = EventMappingRepository(db)
     event_mapping = repository.create_event_mapping(

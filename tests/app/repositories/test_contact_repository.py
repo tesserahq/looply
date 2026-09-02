@@ -480,6 +480,25 @@ def test_search_text(db, test_contact):
     assert len(results) == 0
 
 
+def test_search_text_matches_email_local_part(db):
+    """A partial term (e.g. just the local part of an email) should still
+    match, even though Postgres' text search parser stores the whole email
+    address as a single lexeme rather than splitting on "@"/".""."""
+    contact_repository = ContactRepository(db)
+    contact = contact_repository.create_contact(
+        ContactCreate(
+            first_name="Hello",
+            last_name="There",
+            email="jane@hello.com",
+            contact_type="individual",
+            phone_type="mobile",
+        )
+    )
+
+    results = contact_repository.search_text("jane")
+    assert any(c.id == contact.id for c in results)
+
+
 def test_search_text_with_pagination(db, test_contact):
     """Test searching contacts by text with pagination."""
     contact_repository = ContactRepository(db)

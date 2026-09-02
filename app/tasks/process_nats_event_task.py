@@ -104,13 +104,17 @@ def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
 
     Returns:
         The created CustomEvent's id as a string, or None if event_type isn't
-        tracked, has no configured identity-key mapping, or that mapping's
-        source_path didn't resolve for this event.
+        tracked, is tracked but disabled (EventMapping.is_active is false), has
+        no configured identity-key mapping, or that mapping's source_path
+        didn't resolve for this event.
     """
     event_type = msg.get("event_type", "")
     event_mapping = EventMappingRepository(db).get_by_event_type(event_type)
     if not event_mapping:
         logger.debug(f"Dropping untracked event_type {event_type!r}")
+        return None
+    if not event_mapping.is_active:
+        logger.debug(f"Dropping event for disabled mapping {event_type!r}")
         return None
 
     occurred_at = _parse_occurred_at(msg.get("time"))

@@ -55,6 +55,23 @@ def test_untracked_event_type_is_dropped(db):
     )
 
 
+def test_disabled_mapping_is_dropped(db, test_identity_event_mapping):
+    """A disabled mapping must be dropped the same way an untracked event_type
+    is - before any Contact resolution is attempted - even though it's fully
+    configured with identity."""
+    test_identity_event_mapping.is_active = False
+    db.commit()
+
+    envelope = _envelope()
+
+    event_id = _process_nats_event(db, envelope)
+
+    assert event_id is None
+    assert (
+        ContactRepository(db).get_contact_by_external_id("person-external-id") is None
+    )
+
+
 def test_no_identity_configured_is_dropped(db, test_event_mapping, test_user):
     """test_event_mapping registers "com.mylinden.person.created", not
     "com.mylinden.person.updated" - register the right event_type with no

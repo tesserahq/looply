@@ -118,6 +118,46 @@ def test_update_event_mapping_identity(db, test_event_mapping):
     assert updated.identity_source_path == "person.email"
 
 
+def test_create_event_mapping_defaults_to_active(db, test_user):
+    repository = EventMappingRepository(db)
+    event_mapping = repository.create_event_mapping(
+        EventMappingCreate(
+            event_type="com.mylinden.person.created", created_by_id=test_user.id
+        )
+    )
+
+    assert event_mapping.is_active is True
+
+
+def test_disable_and_reenable_event_mapping(db, test_event_mapping):
+    repository = EventMappingRepository(db)
+
+    disabled = repository.update_event_mapping(
+        test_event_mapping.id, EventMappingUpdateRequest(is_active=False)
+    )
+    assert disabled.is_active is False
+
+    reenabled = repository.update_event_mapping(
+        test_event_mapping.id, EventMappingUpdateRequest(is_active=True)
+    )
+    assert reenabled.is_active is True
+
+
+def test_clone_event_mapping_from_disabled_source_is_active(
+    db, test_event_mapping, test_user
+):
+    repository = EventMappingRepository(db)
+    repository.update_event_mapping(
+        test_event_mapping.id, EventMappingUpdateRequest(is_active=False)
+    )
+
+    clone = repository.clone_event_mapping(
+        test_event_mapping, "com.mylinden.person.deleted", test_user.id
+    )
+
+    assert clone.is_active is True
+
+
 def test_update_event_mapping_invalid_identity_target_field(db, test_event_mapping):
     repository = EventMappingRepository(db)
     with pytest.raises(InvalidEventMappingError):

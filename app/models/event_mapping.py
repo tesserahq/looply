@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.mixins import TimestampMixin, SoftDeleteMixin
-from sqlalchemy import Column, ForeignKey, String
+from sqlalchemy import Boolean, Column, ForeignKey, String
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 import uuid
 
@@ -74,6 +74,14 @@ class EventMapping(Base, TimestampMixin, SoftDeleteMixin):
     created_by_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    # Pauses ingestion for this event_type without soft-deleting the row: unlike
+    # delete, disabling leaves event_type reserved (no interaction with the
+    # partial unique index, which keys off deleted_at, not this column) and
+    # keeps every field mapping intact for when it's re-enabled - the whole
+    # point being to skip an expensive delete-and-reconfigure round trip.
+    # Checked in app.tasks.process_nats_event_task before field mappings are
+    # ever fetched, so disabling never requires touching EventFieldMapping rows.
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     field_mappings = relationship(
         "EventFieldMapping", back_populates="event_mapping", lazy="select"

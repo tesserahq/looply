@@ -101,8 +101,13 @@ def test_clone_event_mapping(client_test_user, test_identity_event_mapping, fake
     data = response.json()
     assert data["id"] != str(test_identity_event_mapping.id)
     assert data["event_type"] == new_event_type
-    assert data["identity_target_field"] == test_identity_event_mapping.identity_target_field
-    assert data["identity_source_path"] == test_identity_event_mapping.identity_source_path
+    assert (
+        data["identity_target_field"]
+        == test_identity_event_mapping.identity_target_field
+    )
+    assert (
+        data["identity_source_path"] == test_identity_event_mapping.identity_source_path
+    )
     assert data["created_by_id"] is not None
 
     fields_response = client_test_user.get(f"/event-mappings/{data['id']}/fields")

@@ -57,10 +57,16 @@ celery_app.autodiscover_tasks(["app.tasks"])  # ensure tasks are registered expl
 # First beat schedule in this repo: requires a `celery -A app.tasks beat` process
 # to actually be deployed/run somewhere in addition to the worker.
 celery_app.conf.beat_schedule = {
+    # Checks every 'sending' campaign against Sendly and marks it 'completed'
+    # once the send stage finishes. Runs every 60 seconds.
     "poll-campaign-status": {
         "task": "app.tasks.poll_campaign_status",
         "schedule": 60.0,
     },
+    # Refreshes opened_at/clicked_at and result counts for completed
+    # campaigns still inside their bounded engagement-polling window.
+    # A plain float schedule is an interval in seconds, so this runs
+    # every 300 seconds (5 minutes).
     "poll-campaign-engagement": {
         "task": "app.tasks.poll_campaign_engagement",
         "schedule": 300.0,

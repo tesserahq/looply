@@ -67,7 +67,7 @@ class Settings(BaseSettings):
         json_schema_extra={"env": "DB_APP_NAME"},
     )
     engagement_polling_window_days: int = Field(
-        default=3,
+        default=7,
         json_schema_extra={"env": "ENGAGEMENT_POLLING_WINDOW_DAYS"},
     )
 

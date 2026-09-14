@@ -226,3 +226,77 @@ def test_preview_draft_segment_dangling_campaign_returns_422(
         },
     )
     assert response.status_code == 422
+
+
+def test_list_segment_contacts(
+    client_test_user: TestClient, test_segment, test_contact_list, test_contact, db
+):
+    from app.repositories.contact_list_repository import ContactListRepository
+
+    ContactListRepository(db).add_contact_to_list(test_contact_list.id, test_contact.id)
+
+    response = client_test_user.get(f"/segments/{test_segment.id}/contacts")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "items" in data
+    assert "total" in data
+    assert data["total"] == 1
+    assert data["items"][0]["id"] == str(test_contact.id)
+
+
+def test_list_segment_contacts_no_matches(client_test_user: TestClient, test_segment):
+    response = client_test_user.get(f"/segments/{test_segment.id}/contacts")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["total"] == 0
+    assert data["items"] == []
+
+
+def test_list_segment_contacts_pagination(
+    client_test_user: TestClient, test_segment, test_contact_list, test_contact, db
+):
+    from app.repositories.contact_list_repository import ContactListRepository
+
+    ContactListRepository(db).add_contact_to_list(test_contact_list.id, test_contact.id)
+
+    response = client_test_user.get(
+        f"/segments/{test_segment.id}/contacts", params={"page": 1, "size": 1}
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["page"] == 1
+    assert data["size"] == 1
+    assert len(data["items"]) == 1
+
+
+def test_list_segment_contacts_not_found(client_test_user: TestClient):
+    response = client_test_user.get(f"/segments/{uuid4()}/contacts")
+    assert response.status_code == 404
+
+
+def test_list_segment_contacts_dangling_campaign_returns_422(
+    client_test_user: TestClient, faker, db
+):
+    from app.models.segment import Segment
+
+    segment = Segment(
+        name=faker.catch_phrase(),
+        rule={
+            "root": {
+                "type": "campaign_activity",
+                "campaign_id": str(uuid4()),
+                "event": "opened",
+                "op": "has_not",
+            }
+        },
+        created_by_id=client_test_user.app.state.test_user.id,
+    )
+    db.add(segment)
+    db.commit()
+    db.refresh(segment)
+
+    response = client_test_user.get(f"/segments/{segment.id}/contacts")
+    assert response.status_code == 422

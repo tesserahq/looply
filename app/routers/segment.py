@@ -5,6 +5,7 @@ from fastapi_pagination.ext.sqlalchemy import paginate
 
 from app.db import get_db
 from app.models.segment import Segment as SegmentModel
+from app.schemas.contact import Contact
 from app.schemas.segment import (
     Segment,
     SegmentCreate,
@@ -115,6 +116,21 @@ def preview_segment(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
         )
     return SegmentPreviewResponse(contact_count=count)
+
+
+@router.get("/{segment_id}/contacts", response_model=Page[Contact])
+def list_segment_contacts(
+    segment: SegmentModel = Depends(get_segment_by_id),
+    db: Session = Depends(get_db),
+    _authorized: bool = Depends(rbac["read"]),
+):
+    """Paginated list of contacts currently matching a saved segment."""
+    try:
+        return paginate(db, SegmentRepository(db).get_contacts_query(segment))
+    except SegmentResolutionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
+        )
 
 
 @router.post("/preview", response_model=SegmentPreviewResponse)

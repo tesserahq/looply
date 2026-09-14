@@ -83,32 +83,45 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         """
         return self.db.query(Contact).offset(skip).limit(limit).all()
 
-    def get_contacts_query(self):
+    def list_contacts_query(
+        self,
+        q: Optional[str] = None,
+        status: Optional[str] = None,
+        contact_type: Optional[str] = None,
+        tag_names: Optional[List[str]] = None,
+    ):
         """
-        Get a query for all contacts.
-        This is useful for pagination with fastapi-pagination.
-
-        Returns:
-            Query: SQLAlchemy query object for contacts
-        """
-        return self.db.query(Contact).order_by(Contact.created_at.desc())
-
-    def get_contacts_by_tags_query(self, tag_names: List[str]):
-        """
-        Get a query for active contacts having at least one of `tag_names`
-        (case-insensitive, OR semantics), ordered newest-first for pagination.
+        Get a query for contacts filtered by any combination of full-text
+        search (q), status, contact_type, and tags. All supplied filters are
+        ANDed together; tags themselves are OR'd (at least one of
+        `tag_names`, case-insensitive). Ordered newest-first, for pagination.
+        This is the single query builder backing GET /contacts, unifying what
+        used to be the separate GET /contacts/search endpoint.
 
         Args:
-            tag_names: Tag names to filter by
+            q: Free-text search term, matched via PostgreSQL full-text search
+            status: Exact ContactStatus value to filter by
+            contact_type: Exact ContactType value to filter by
+            tag_names: Tag names to filter by (OR semantics)
 
         Returns:
             Query: SQLAlchemy query object for matching contacts
         """
-        return (
-            TagRepository(self.db)
-            .get_contacts_by_tags_query(tag_names)
-            .order_by(Contact.created_at.desc())
+        query = (
+            TagRepository(self.db).get_contacts_by_tags_query(tag_names)
+            if tag_names
+            else self.db.query(Contact)
         )
+
+        if status:
+            query = query.filter(Contact.status == status)
+        if contact_type:
+            query = query.filter(Contact.contact_type == contact_type)
+        if q:
+            tsquery = self._build_prefix_tsquery(q)
+            query = query.filter(Contact.fts.op("@@")(tsquery))
+
+        return query.order_by(Contact.created_at.desc())
 
     def get_contacts_by_creator(
         self, created_by_id: UUID, skip: int = 0, limit: int = 100
@@ -386,24 +399,6 @@ class ContactRepository(SoftDeleteRepository[Contact]):
             .offset(skip)
             .limit(limit)
             .all()
-        )
-
-    def get_search_text_query(self, search_term: str):
-        """
-        Get a query for searching contacts by text using PostgreSQL full-text search.
-        This is useful for pagination with fastapi-pagination.
-
-        Args:
-            search_term: The text to search for
-
-        Returns:
-            Query: SQLAlchemy query object for search results
-        """
-        tsquery = self._build_prefix_tsquery(search_term)
-        return (
-            self.db.query(Contact)
-            .filter(Contact.fts.op("@@")(tsquery))
-            .order_by(Contact.created_at.desc())
         )
 
     def restore_contact(self, contact_id: UUID) -> bool:

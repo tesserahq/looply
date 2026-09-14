@@ -216,13 +216,15 @@ def _campaign_activity_clause(db: Session, condition: CampaignActivityCondition)
         CampaignRecipient.contact_id == Contact.id,
         CampaignRecipient.campaign_id == condition.campaign_id,
     )
+    has_opened_or_clicked = was_sent.where(timestamp_column.isnot(None)).exists()
     if condition.op == CampaignActivityOp.HAS:
-        return was_sent.where(timestamp_column.isnot(None)).exists()
-    # HAS_NOT means "was sent this campaign and did not open/click it" - a
-    # contact never sent this campaign (no CampaignRecipient row at all)
-    # does not qualify, so this still requires `was_sent`, just with the
-    # timestamp null instead of dropping the EXISTS entirely.
-    return was_sent.where(timestamp_column.is_(None)).exists()
+        return has_opened_or_clicked
+    # HAS_NOT is a true negation over the whole contact set: it includes
+    # contacts who were sent the campaign but didn't open/click it, AND
+    # contacts never sent the campaign at all (no CampaignRecipient row).
+    # Segments filter down from "all contacts", so a rule must never
+    # implicitly narrow that universe on its own.
+    return ~has_opened_or_clicked
 
 
 def _contact_field_clause(condition: ContactFieldCondition):

@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.contact import Contact
 from app.models.segment import Segment
 from app.repositories.soft_delete_repository import SoftDeleteRepository
 from app.repositories.segment_resolver import (
@@ -125,6 +126,18 @@ class SegmentRepository(SoftDeleteRepository[Segment]):
             SegmentResolutionError: see app.repositories.segment_resolver.
         """
         return resolve_contacts_query(self.db, self.get_root(segment)).all()
+
+    def get_contacts_query(self, segment: Segment):
+        """
+        Query for the segment's currently resolved contacts, ordered
+        newest-first - for pagination (GET /segments/{id}/contacts).
+
+        Raises:
+            SegmentResolutionError: see app.repositories.segment_resolver.
+        """
+        return resolve_contacts_query(self.db, self.get_root(segment)).order_by(
+            Contact.created_at.desc()
+        )
 
     def preview_count(self, segment: Segment) -> int:
         """

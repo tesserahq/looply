@@ -11,8 +11,10 @@ from app.schemas.contact import (
     Contact,
     ContactCreateRequest,
     ContactUpdate,
+    ContactType,
     ContactTypeOption,
     CONTACT_TYPE_OPTIONS,
+    ContactStatus,
     ContactStatusOption,
     CONTACT_STATUS_OPTIONS,
 )
@@ -85,6 +87,17 @@ def batch_create_contacts(
 
 @router.get("", response_model=Page[Contact])
 def list_contacts(
+    q: Optional[str] = Query(
+        None, description="Free-text search term (PostgreSQL full-text search)."
+    ),
+    status_filter: Optional[ContactStatus] = Query(
+        None, alias="status", description="Exact contact status to filter by."
+    ),
+    contact_type_filter: Optional[ContactType] = Query(
+        None,
+        alias="contact_type",
+        description="Exact contact type to filter by.",
+    ),
     tags: Optional[str] = Query(
         None,
         description="Comma-separated tag names. Returns contacts having at "
@@ -93,37 +106,18 @@ def list_contacts(
     db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
-    """List all contacts with pagination, optionally filtered by tag."""
+    """List contacts with pagination, optionally narrowed by any combination
+    of full-text search (q), status, contact_type, and tags (all filters are
+    ANDed together)."""
     contact_repository = ContactRepository(db)
-    if tags:
-        tag_names = [t.strip() for t in tags.split(",") if t.strip()]
-        return paginate(db, contact_repository.get_contacts_by_tags_query(tag_names))
-    return paginate(db, contact_repository.get_contacts_query())
-
-
-@router.get("/search", response_model=Page[Contact])
-def search_contacts(
-    q: str,
-    db: Session = Depends(get_db),
-    _authorized: bool = Depends(rbac["read"]),
-):
-    """
-    Search contacts by text using PostgreSQL full-text search.
-
-    Args:
-        q: The search query term
-
-    Returns:
-        Page[Contact]: Paginated list of contacts matching the search term
-    """
-    if not q:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Search query parameter 'q' is required",
-        )
-
-    contact_repository = ContactRepository(db)
-    return paginate(db, contact_repository.get_search_text_query(q))
+    tag_names = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+    query = contact_repository.list_contacts_query(
+        q=q,
+        status=status_filter.value if status_filter else None,
+        contact_type=contact_type_filter.value if contact_type_filter else None,
+        tag_names=tag_names,
+    )
+    return paginate(db, query)
 
 
 @router.get("/contact-types", response_model=Page[ContactTypeOption])

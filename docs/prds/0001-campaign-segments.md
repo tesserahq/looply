@@ -261,17 +261,20 @@ contradiction, not just a wording issue.
     deleted or reverted after the segment was saved fails the resolve explicitly instead of
     silently widening the audience (a referenced-but-gone campaign would otherwise match zero
     `CampaignRecipient` rows, making every contact satisfy `has_not`).
-  - **`CampaignActivityOp.HAS_NOT` semantics**: defined as "was sent this campaign and did not
-    open/click it" — requires an *existing* `CampaignRecipient` row for the given `campaign_id`
-    with the relevant timestamp column null. A contact who was never sent that campaign at all (no
-    matching row) does **not** satisfy `has_not`:
+  - **`CampaignActivityOp.HAS_NOT` semantics**: defined as a true negation of `has` over the
+    account's entire contact base — "did not open/click this campaign," which includes both a
+    contact sent the campaign who didn't open/click it, and a contact never sent the campaign at
+    all. Segments filter down from "all contacts" (see the zero-condition case above); a rule must
+    never implicitly narrow that universe to "contacts with any history for this campaign" on its
+    own. Superseded the original Phase-2 decision recorded under "Known Risks" (`has_not` requiring
+    an existing `CampaignRecipient` row) — see that entry for why it changed.
     ```sql
     -- has_not(campaign_id, event) resolves to:
-    EXISTS (
+    NOT EXISTS (
       SELECT 1 FROM campaign_recipient
       WHERE contact_id = contact.id
         AND campaign_id = :campaign_id
-        AND {event}_at IS NULL
+        AND {event}_at IS NOT NULL
     )
     ```
 
@@ -646,12 +649,21 @@ and `tessera-sdk-py` (both under `~/sites/linden-family/`) as of 2026-08-29.
   segment was saved fails explicitly rather than silently widening the audience. See Phase 2's rule
   tree section for the implementation.
 
-- **[RESOLVED] `has_not` had no defined set semantics.** It was unspecified whether a contact who
-  was never sent the referenced campaign at all (no `CampaignRecipient` row) counts as "has not
-  opened" it. Resolved by decision: `has_not` requires an *existing* `CampaignRecipient` row for
-  the referenced campaign with the relevant timestamp column null — i.e., "was sent it and didn't
-  open/click it," not "wasn't sent it." Contacts never sent that campaign do not qualify as
-  `has_not`. See Phase 2's rule tree section for the SQL definition.
+- **[RESOLVED, superseded 2026-09-14] `has_not` had no defined set semantics.** It was unspecified
+  whether a contact who was never sent the referenced campaign at all (no `CampaignRecipient` row)
+  counts as "has not opened" it. Originally resolved by requiring an *existing* `CampaignRecipient`
+  row for the referenced campaign with the relevant timestamp column null — i.e., "was sent it and
+  didn't open/click it," not "wasn't sent it" — partly as a guardrail against the audience-widening
+  risk in the item above (an invalid/deleted `campaign_id` matching zero rows would otherwise make
+  every contact satisfy `has_not`).
+
+  That guardrail is now redundant with lifecycle validation (the item above), which independently
+  rejects any segment referencing a non-`completed` campaign at both save and resolution time. With
+  that risk covered separately, the narrow `has_not` semantics no longer served its original purpose
+  and instead violated segments' core invariant — a segment with zero conditions matches all
+  contacts, and every added rule should only narrow that set, never implicitly redefine its universe
+  per-condition. Re-resolved by decision: `has_not` is now a true negation of `has`, including
+  contacts never sent the campaign. See Phase 2's rule tree section for the updated SQL definition.
 
 - **[RESOLVED] The "data as of" indicator had no trustworthy timestamp to point at.** The schema
   added engagement values but no successful-sync timestamp, and polling deliberately swallows

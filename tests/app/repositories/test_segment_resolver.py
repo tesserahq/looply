@@ -220,9 +220,15 @@ def test_campaign_activity_has(db, faker, test_user, test_segment, test_contact)
     assert never_sent.id not in resolved_ids
 
 
-def test_campaign_activity_has_not_excludes_never_sent(
+def test_campaign_activity_has_not_includes_never_sent(
     db, faker, test_user, test_segment, test_contact
 ):
+    """has_not is a true negation of has: it includes both contacts sent
+    the campaign who didn't open it, and contacts never sent it at all.
+    Segments narrow down from the full contact base (see the zero-condition
+    test above), so a single has_not condition must not implicitly exclude
+    contacts with no history for this campaign.
+    """
     campaign = _completed_campaign(db, faker, test_user, test_segment)
     # Sent but did not open.
     db.add(CampaignRecipient(campaign_id=campaign.id, contact_id=test_contact.id))
@@ -240,7 +246,7 @@ def test_campaign_activity_has_not_excludes_never_sent(
     resolved_ids = {c.id for c in resolve_contacts_query(db, root).all()}
 
     assert test_contact.id in resolved_ids
-    assert never_sent.id not in resolved_ids
+    assert never_sent.id in resolved_ids
 
 
 def test_campaign_activity_has_not_excludes_openers(

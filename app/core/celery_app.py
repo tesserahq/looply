@@ -4,10 +4,12 @@ import logging
 import rollbar
 from celery import Celery
 from celery.signals import task_failure, worker_process_init
+from tessera_sdk.config import get_settings as get_sdk_settings
 
 from app.config import get_settings
 
 settings = get_settings()
+redis_settings = get_sdk_settings()
 
 celery_app = Celery("looply-worker")
 
@@ -35,8 +37,8 @@ def report_task_failure(
 
 
 celery_app.conf.update(
-    broker_url=f"redis://{settings.redis_host}:{settings.redis_port}/0",
-    result_backend=f"redis://{settings.redis_host}:{settings.redis_port}/0",
+    broker_url=redis_settings.redis_connection_url,
+    result_backend=redis_settings.redis_connection_url,
     task_default_queue="looply",  # Use dedicated queue for looply tasks
     task_routes={
         "app.tasks.*": {"queue": "looply"},  # Route all app.tasks.* to looply queue

@@ -196,8 +196,7 @@ Key environment variables:
 
 - `DATABASE_URL` - PostgreSQL connection string
 - `IDENTIES_HOST` - Tessera authentication service URL
-- `REDIS_HOST` - Redis host
-- `REDIS_PORT` - Redis port
+- `REDIS_URL` - Complete Redis URL, including ACL credentials in production
 - `ENVIRONMENT` - Environment (development/production)
 - `DISABLE_AUTH` - Disable authentication for testing (development only)
 - `ROLLBAR_ACCESS_TOKEN` - Rollbar error tracking token

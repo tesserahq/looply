@@ -25,13 +25,19 @@ from app.tasks.process_nats_event_task import process_nats_event_task
 
 LoggingConfig()
 logger = logging.getLogger("nats_worker")
+# A newly created durable (for example after a migration or cutover) must start
+# after the current stream tail. LAST would replay the newest stored event, which
+# the previous durable may already have processed.
+NATS_DELIVER_POLICY = DeliverPolicy.NEW
 
 
 async def _run_async() -> None:
     """Async function that runs the FastStream application."""
     settings = get_settings()
     logger.info("Starting NATS worker...")
-    logger.info(f"NATS URL: {settings.nats_url}")
+    # The URL contains the application account password in production. Never
+    # include it in logs, even during connection troubleshooting.
+    logger.info("NATS connection endpoint configured")
     logger.info(f"NATS Enabled: {settings.nats_enabled}")
 
     if not settings.nats_enabled:
@@ -56,7 +62,7 @@ async def _run_async() -> None:
         stream=js_stream,  # THIS makes it JetStream
         durable=settings.nats_queue,  # durable consumer name
         queue=settings.nats_queue,
-        deliver_policy=DeliverPolicy.LAST,
+        deliver_policy=NATS_DELIVER_POLICY,
     )
     async def handler(msg: dict) -> None:
         """Handle incoming NATS events and dispatch them to the ingestion task."""

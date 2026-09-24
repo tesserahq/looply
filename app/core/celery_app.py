@@ -2,6 +2,9 @@
 import logging
 
 import rollbar
+
+# RollbarHandler lives in a submodule that `import rollbar` does not load.
+import rollbar.logger
 from celery import Celery
 from celery.signals import task_failure, worker_process_init
 from tessera_sdk.config import get_settings as get_sdk_settings

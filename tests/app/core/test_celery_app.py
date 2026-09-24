@@ -63,4 +63,6 @@ def test_init_rollbar_attaches_error_handler_in_production(monkeypatch):
     rollbar_init.assert_called_once_with("test-token", environment="production")
     assert len(added) == 1
     assert isinstance(added[0], RollbarHandler)
-    assert added[0].level == logging.ERROR
+    # RollbarHandler.setLevel sets notify_level (what is sent to Rollbar); the
+    # handler level stays at DEBUG so recent records are kept as history.
+    assert added[0].notify_level == logging.ERROR

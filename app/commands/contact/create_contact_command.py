@@ -48,52 +48,43 @@ class CreateContactCommand:
             ValueError: If email already exists
             ValueError: If phone already exists
         """
-        try:
-            # Check if email already exists
-            if contact_data.email and self.contact_repository.get_contact_by_email(
-                contact_data.email
-            ):
-                raise ValueError("Email already registered")
+        # Check if email already exists
+        if contact_data.email and self.contact_repository.get_contact_by_email(
+            contact_data.email
+        ):
+            raise ValueError("Email already registered")
 
-            # Check if phone already exists
-            if contact_data.phone and self.contact_repository.get_contact_by_phone(
-                contact_data.phone
-            ):
-                raise ValueError("Phone number already registered")
+        # Check if phone already exists
+        if contact_data.phone and self.contact_repository.get_contact_by_phone(
+            contact_data.phone
+        ):
+            raise ValueError("Phone number already registered")
 
-            # Check if external_id already exists
-            if (
+        # Check if external_id already exists
+        if (
+            contact_data.external_id
+            and self.contact_repository.get_contact_by_external_id(
                 contact_data.external_id
-                and self.contact_repository.get_contact_by_external_id(
-                    contact_data.external_id
-                )
-            ):
-                raise ValueError("External ID already registered")
-
-            # Create contact
-            contact_create = ContactCreate(
-                **contact_data.model_dump(exclude={"source"}),
-                created_by_id=created_by_id,
-                source=contact_data.source or "manual",
             )
+        ):
+            raise ValueError("External ID already registered")
 
-            contact = self.contact_repository.create_contact(contact_create)
+        # Create contact
+        contact_create = ContactCreate(
+            **contact_data.model_dump(exclude={"source"}),
+            created_by_id=created_by_id,
+            source=contact_data.source or "manual",
+        )
 
-            if not contact:
-                raise ValueError("Failed to create contact")
+        contact = self.contact_repository.create_contact(contact_create)
 
-            # Publish contact created event
-            self._publish_contact_created_event(contact)
+        if not contact:
+            raise ValueError("Failed to create contact")
 
-            return contact
+        # Publish contact created event
+        self._publish_contact_created_event(contact)
 
-        except ValueError:
-            # Re-raise ValueError as-is (these are expected validation errors)
-            raise
-        except Exception as e:
-            # Rollback the transaction if something goes wrong
-            self.db.rollback()
-            raise Exception(f"Failed to create contact: {str(e)}")
+        return contact
 
     def _publish_contact_created_event(self, contact: Contact) -> None:
         """

@@ -228,7 +228,7 @@ class ContactInteractionRepository(SoftDeleteRepository[ContactInteraction]):
         """
         db_interaction = ContactInteraction(**interaction.model_dump())
         self.db.add(db_interaction)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(db_interaction)
         return db_interaction
 
@@ -254,7 +254,7 @@ class ContactInteractionRepository(SoftDeleteRepository[ContactInteraction]):
             update_data = interaction.model_dump(exclude_unset=True)
             for key, value in update_data.items():
                 setattr(db_interaction, key, value)
-            self.db.commit()
+            self.db.flush()
             self.db.refresh(db_interaction)
         return db_interaction
 

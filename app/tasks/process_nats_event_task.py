@@ -41,7 +41,7 @@ from app.repositories.event_field_mapping_repository import (
 )
 from app.repositories.event_mapping_repository import EventMappingRepository
 from app.services.event_mapping_resolver import resolve as resolve_event_mappings
-from app.utils.db.db_session_helper import db_session
+from app.db import session_scope
 
 logger = logging.getLogger(__name__)
 
@@ -163,5 +163,5 @@ def _process_nats_event(db: Session, msg: Dict) -> Optional[str]:
 def process_nats_event_task(msg: Dict) -> Optional[str]:
     """Celery entry point - opens its own session and delegates to _process_nats_event
     (called directly with the test db fixture in tests, no live NATS needed)."""
-    with db_session() as db:
+    with session_scope() as db:
         return _process_nats_event(db, msg)

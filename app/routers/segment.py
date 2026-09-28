@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
 
-from app.db import get_db
+from app.db import DbSession
 from app.models.segment import Segment as SegmentModel
 from app.schemas.contact import Contact
 from app.schemas.segment import (
@@ -37,7 +36,7 @@ rbac = build_rbac_dependencies(resource=RESOURCE)
 @router.post("", response_model=Segment, status_code=status.HTTP_201_CREATED)
 def create_segment(
     segment_data: SegmentCreateRequest,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -58,7 +57,7 @@ def create_segment(
 
 @router.get("", response_model=Page[Segment])
 def list_segments(
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List all segments with pagination."""
@@ -77,8 +76,8 @@ def get_segment(
 @router.put("/{segment_id}", response_model=Segment)
 def update_segment(
     segment_data: SegmentUpdate,
+    db: DbSession,
     existing_segment: SegmentModel = Depends(get_segment_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Update a segment's name and/or rule."""
@@ -94,8 +93,8 @@ def update_segment(
 
 @router.delete("/{segment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_segment(
+    db: DbSession,
     existing_segment: SegmentModel = Depends(get_segment_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["delete"]),
 ):
     """Delete a segment."""
@@ -104,8 +103,8 @@ def delete_segment(
 
 @router.get("/{segment_id}/preview", response_model=SegmentPreviewResponse)
 def preview_segment(
+    db: DbSession,
     segment: SegmentModel = Depends(get_segment_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Live, non-persisted contact count for a saved segment."""
@@ -120,8 +119,8 @@ def preview_segment(
 
 @router.get("/{segment_id}/contacts", response_model=Page[Contact])
 def list_segment_contacts(
+    db: DbSession,
     segment: SegmentModel = Depends(get_segment_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Paginated list of contacts currently matching a saved segment."""
@@ -136,7 +135,7 @@ def list_segment_contacts(
 @router.post("/preview", response_model=SegmentPreviewResponse)
 def preview_draft_segment(
     rule: SegmentRuleCreate,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Live, non-persisted contact count for a rule tree not yet saved as a segment."""

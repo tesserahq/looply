@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from app.db import get_db
+from app.db import DbSession
 from app.schemas.stats import Stats, ContactInteractionWithContact, ContactSummary
 from app.schemas.common import DataResponse
 from app.repositories.stats_repository import StatsRepository
@@ -18,7 +17,7 @@ rbac = build_rbac_dependencies(resource=RESOURCE)
 
 @router.get("", response_model=DataResponse[Stats])
 def get_stats(
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get statistics about contacts, lists, and upcoming interactions."""

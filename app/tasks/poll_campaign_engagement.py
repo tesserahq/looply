@@ -10,7 +10,7 @@ from app.core.celery_app import celery_app
 from app.integrations.sendly_client_factory import build_sendly_client
 from app.models.campaign import Campaign
 from app.repositories.campaign_repository import CampaignRepository
-from app.utils.db.db_session_helper import db_session
+from app.db import session_scope
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 @celery_app.task(name="app.tasks.poll_campaign_engagement")
 def poll_campaign_engagement() -> None:
     """Entry point invoked by Celery beat."""
-    with db_session() as db:
+    with session_scope() as db:
         _poll_campaign_engagement(db)
 
 

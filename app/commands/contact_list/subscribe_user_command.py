@@ -5,6 +5,7 @@ from typing import Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 
+from app.db import on_commit
 from app.models.contact_list import ContactList
 from app.models.contact_list_member import ContactListMember
 from app.models.contact import Contact
@@ -122,9 +123,15 @@ class SubscribeUserCommand:
         """
         event = build_contact_subscribed_event(contact_list, contact, member)
         if self.nats_publisher is not None:
-            try:
-                self.nats_publisher.publish_sync(event, event.event_type)
-            except Exception:  # pragma: no cover - defensive logging
-                self.logger.exception(
-                    "Failed to publish contact-subscribed event to NATS"
-                )
+            publisher = self.nats_publisher
+
+            def publish() -> None:
+                try:
+                    publisher.publish_sync(event, event.event_type)
+                except Exception:  # pragma: no cover - defensive logging
+                    self.logger.exception(
+                        "Failed to publish contact-subscribed event to NATS"
+                    )
+
+            # Dispatch only after the transaction commits; dropped on rollback.
+            on_commit(publish)

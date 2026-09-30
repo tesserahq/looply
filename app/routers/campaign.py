@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
 
-from app.db import get_db
+from app.db import DbSession
 from app.constants.campaign import CampaignStatus
 from app.models.campaign import Campaign as CampaignModel
 from app.schemas.campaign import (
@@ -36,7 +35,7 @@ rbac = build_rbac_dependencies(resource=RESOURCE)
 @router.post("", response_model=Campaign, status_code=status.HTTP_201_CREATED)
 def create_campaign(
     campaign_data: CampaignCreateRequest,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -57,7 +56,7 @@ def create_campaign(
 
 @router.get("", response_model=Page[Campaign])
 def list_campaigns(
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List all campaigns with pagination."""
@@ -76,8 +75,8 @@ def get_campaign(
 
 @router.get("/{campaign_id}/recipients", response_model=Page[CampaignRecipientSchema])
 def list_campaign_recipients(
+    db: DbSession,
     campaign: CampaignModel = Depends(get_campaign_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List the recipients a campaign was sent to, paginated.
@@ -93,8 +92,8 @@ def list_campaign_recipients(
 
 @router.get("/{campaign_id}/stats", response_model=CampaignStats)
 def get_campaign_stats(
+    db: DbSession,
     campaign: CampaignModel = Depends(get_campaign_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Computed engagement metrics (delivery/open/click/complaint rates)
@@ -107,8 +106,8 @@ def get_campaign_stats(
     response_model=CampaignEngagementTimeline,
 )
 def get_campaign_engagement_timeline(
+    db: DbSession,
     campaign: CampaignModel = Depends(get_campaign_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Opens/clicks bucketed by time elapsed since the campaign was sent.
@@ -119,8 +118,8 @@ def get_campaign_engagement_timeline(
 @router.put("/{campaign_id}", response_model=Campaign)
 def update_campaign(
     campaign_data: CampaignUpdate,
+    db: DbSession,
     existing_campaign: CampaignModel = Depends(get_campaign_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Update a draft campaign. Only allowed while status is 'draft'."""
@@ -135,8 +134,8 @@ def update_campaign(
 
 @router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_campaign(
+    db: DbSession,
     existing_campaign: CampaignModel = Depends(get_campaign_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["delete"]),
 ):
     """Delete a campaign."""
@@ -149,8 +148,8 @@ def delete_campaign(
     status_code=status.HTTP_200_OK,
 )
 def send_campaign(
+    db: DbSession,
     campaign: CampaignModel = Depends(get_campaign_by_id),
-    db: Session = Depends(get_db),
     # Sending mutates the campaign (draft -> sending), so it's gated the same
     # as update rather than introducing a separate RBAC action for it.
     _authorized: bool = Depends(rbac["update"]),

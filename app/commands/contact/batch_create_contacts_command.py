@@ -5,6 +5,7 @@ from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 
+from app.db import on_commit
 from app.models.contact import Contact
 from app.schemas.contact import ContactCreate, ContactCreateRequest
 from app.repositories.contact_repository import ContactRepository
@@ -138,7 +139,15 @@ class BatchCreateContactsCommand:
         """
         event = build_contact_created_event(contact)
         if self.nats_publisher is not None:
-            try:
-                self.nats_publisher.publish_sync(event, event.event_type)
-            except Exception:  # pragma: no cover - defensive logging
-                self.logger.exception("Failed to publish contact-created event to NATS")
+            publisher = self.nats_publisher
+
+            def publish() -> None:
+                try:
+                    publisher.publish_sync(event, event.event_type)
+                except Exception:  # pragma: no cover - defensive logging
+                    self.logger.exception(
+                        "Failed to publish contact-created event to NATS"
+                    )
+
+            # Dispatch only after the transaction commits; dropped on rollback.
+            on_commit(publish)

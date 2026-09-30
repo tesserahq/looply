@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
 
-from app.db import get_db
+from app.db import DbSession
 from app.models.event_mapping import EventMapping as EventMappingModel
 from app.models.event_field_mapping import EventFieldMapping as EventFieldMappingModel
 from app.schemas.event_mapping import (
@@ -73,7 +73,7 @@ def _resolve_field_definition_id(db: Session, field_name: str) -> UUID:
 @router.post("", response_model=EventMapping, status_code=status.HTTP_201_CREATED)
 def create_event_mapping(
     event_mapping_data: EventMappingCreateRequest,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -96,7 +96,7 @@ def create_event_mapping(
 
 @router.get("", response_model=Page[EventMapping])
 def list_event_mappings(
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List all active event mappings with pagination."""
@@ -115,8 +115,8 @@ def get_event_mapping(
 @router.patch("/{event_mapping_id}", response_model=EventMapping)
 def update_event_mapping(
     update_data: EventMappingUpdateRequest,
+    db: DbSession,
     event_mapping: EventMappingModel = Depends(get_event_mapping_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Update an event mapping's source/identity configuration in place -
@@ -139,8 +139,8 @@ def update_event_mapping(
 )
 def clone_event_mapping(
     clone_data: EventMappingCloneRequest,
+    db: DbSession,
     event_mapping: EventMappingModel = Depends(get_event_mapping_by_id),
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -159,7 +159,7 @@ def clone_event_mapping(
 @router.delete("/{event_mapping_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_event_mapping(
     event_mapping_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["delete"]),
 ):
     """Soft delete an event mapping, cascading to soft-delete all of its active
@@ -177,8 +177,8 @@ def delete_event_mapping(
 )
 def create_event_field_mapping(
     mapping_data: EventFieldMappingCreateRequest,
+    db: DbSession,
     event_mapping: EventMappingModel = Depends(get_event_mapping_by_id),
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -208,8 +208,8 @@ def create_event_field_mapping(
 
 @nested_router.get("", response_model=Page[EventFieldMapping])
 def list_event_field_mappings(
+    db: DbSession,
     event_mapping: EventMappingModel = Depends(get_event_mapping_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List all active attribute mappings for this event mapping, with pagination."""
@@ -233,8 +233,8 @@ def get_event_field_mapping(
 @nested_router.patch("/{mapping_id}", response_model=EventFieldMapping)
 def update_event_field_mapping(
     update_data: EventFieldMappingUpdateRequest,
+    db: DbSession,
     mapping: EventFieldMappingModel = Depends(get_event_field_mapping_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Update an attribute mapping's source_path/target in place - editable,
@@ -290,8 +290,8 @@ def update_event_field_mapping(
 
 @nested_router.delete("/{mapping_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_event_field_mapping(
+    db: DbSession,
     mapping: EventFieldMappingModel = Depends(get_event_field_mapping_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["delete"]),
 ):
     """Soft delete an attribute mapping. It stops being applied to newly

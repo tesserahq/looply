@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from uuid import UUID
 from datetime import datetime, timezone
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
 
-from app.db import get_db
+from app.db import DbSession
 from app.schemas.contact_interaction import (
     ContactInteraction,
     ContactInteractionCreate,
@@ -55,7 +54,7 @@ def list_actions(
 
 @router.get("/pending-actions", response_model=Page[ContactInteraction])
 def get_pending_actions(
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get all pending actions across all contacts."""
@@ -68,8 +67,8 @@ def get_pending_actions(
 )
 def create_contact_interaction(
     interaction_data: ContactInteractionCreateRequest,
+    db: DbSession,
     contact: Contact = Depends(get_contact_by_id),
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -95,8 +94,8 @@ def create_contact_interaction(
 
 @nested_router.get("", response_model=Page[ContactInteraction])
 def list_contact_interactions(
+    db: DbSession,
     contact: Contact = Depends(get_contact_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List all interactions for a specific contact with pagination."""
@@ -108,8 +107,8 @@ def list_contact_interactions(
 
 @nested_router.get("/last", response_model=ContactInteraction)
 def get_last_contact_interaction(
+    db: DbSession,
     contact: Contact = Depends(get_contact_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get the most recent interaction for a contact."""
@@ -127,7 +126,7 @@ def get_last_contact_interaction(
 @router.get("/{interaction_id}", response_model=ContactInteraction)
 def get_contact_interaction(
     interaction_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get a contact interaction by ID."""
@@ -146,7 +145,7 @@ def get_contact_interaction(
 def update_contact_interaction(
     interaction_id: UUID,
     interaction: ContactInteractionUpdate,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Update a contact interaction."""
@@ -164,7 +163,7 @@ def update_contact_interaction(
 @router.delete("/{interaction_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_contact_interaction(
     interaction_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["delete"]),
 ):
     """Delete a contact interaction."""
@@ -177,7 +176,7 @@ def delete_contact_interaction(
 
 @router.get("", response_model=Page[ContactInteraction])
 def list_contact_interactions_global(
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List all contact interactions with pagination."""

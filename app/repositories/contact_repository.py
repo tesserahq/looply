@@ -176,7 +176,7 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         """
         db_contact = Contact(**contact.model_dump(exclude={"tags"}))
         self.db.add(db_contact)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(db_contact)
         if contact.tags:
             TagRepository(self.db).set_contact_tags(
@@ -233,7 +233,7 @@ class ContactRepository(SoftDeleteRepository[Contact]):
                 existing = self.get_contact_by_email(email)
                 if existing and not existing.external_id:
                     existing.external_id = identity_value
-                    self.db.commit()
+                    self.db.flush()
                     self.db.refresh(existing)
         if existing:
             return existing
@@ -249,7 +249,7 @@ class ContactRepository(SoftDeleteRepository[Contact]):
             source=source,
         )
         self.db.add(contact)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(contact)
         if default_tags:
             TagRepository(self.db).set_contact_tags(contact.id, default_tags, None)
@@ -271,7 +271,6 @@ class ContactRepository(SoftDeleteRepository[Contact]):
         ]
         self.db.add_all(db_contacts)
         self.db.flush()  # Flush to get IDs assigned
-        self.db.commit()
         # Refresh all contacts to get full data including timestamps
         for contact in db_contacts:
             self.db.refresh(contact)
@@ -296,7 +295,7 @@ class ContactRepository(SoftDeleteRepository[Contact]):
             tags = update_data.pop("tags", None)
             for key, value in update_data.items():
                 setattr(db_contact, key, value)
-            self.db.commit()
+            self.db.flush()
             if tags is not None:
                 TagRepository(self.db).set_contact_tags(
                     contact_id, tags, db_contact.created_by_id

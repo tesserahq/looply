@@ -51,64 +51,56 @@ class SubscribeUserCommand:
             ValueError: If the contact list is not found
             ValueError: If the user email is not provided
         """
-        try:
-            # Check if contact list exists
-            contact_list = self.contact_list_repository.get_contact_list(
-                contact_list_id
+        # Check if contact list exists
+        contact_list = self.contact_list_repository.get_contact_list(contact_list_id)
+        if not contact_list:
+            raise ValueError(f"Contact list {contact_list_id} not found")
+
+        # Validate user email
+        if not user.email:
+            raise ValueError("User email is required to subscribe")
+
+        # Find or create contact by email
+        contact = self.contact_repository.get_contact_by_email(user.email)
+
+        if not contact:
+            # Create contact from user information
+            contact_data = ContactCreate(
+                first_name=user.first_name,
+                last_name=user.last_name,
+                email=user.email,
+                contact_type="personal",  # Default value
+                phone_type="mobile",  # Default value
+                created_by_id=user.id,
             )
-            if not contact_list:
-                raise ValueError(f"Contact list {contact_list_id} not found")
+            contact = self.contact_repository.create_contact(contact_data)
 
-            # Validate user email
-            if not user.email:
-                raise ValueError("User email is required to subscribe")
+        contact_id = contact.id
 
-            # Find or create contact by email
-            contact = self.contact_repository.get_contact_by_email(user.email)
+        # Check if member already exists
+        existing_member = self.contact_list_repository.get_contact_list_member(
+            contact_list_id, contact_id
+        )
 
-            if not contact:
-                # Create contact from user information
-                contact_data = ContactCreate(
-                    first_name=user.first_name,
-                    last_name=user.last_name,
-                    email=user.email,
-                    contact_type="personal",  # Default value
-                    phone_type="mobile",  # Default value
-                    created_by_id=user.id,
-                )
-                contact = self.contact_repository.create_contact(contact_data)
+        if existing_member:
+            # Already subscribed, return existing member
+            return existing_member
 
-            contact_id = contact.id
+        # Add contact to list using the service method
+        member = self.contact_list_repository.add_contact_to_list(
+            contact_list_id, contact_id
+        )
 
-            # Check if member already exists
-            existing_member = self.contact_list_repository.get_contact_list_member(
-                contact_list_id, contact_id
+        if not member:
+            # This shouldn't happen after our checks, but handle it gracefully
+            raise ValueError(
+                f"Failed to add contact {contact_id} to contact list {contact_list_id}"
             )
 
-            if existing_member:
-                # Already subscribed, return existing member
-                return existing_member
+        # Publish subscription event
+        self._publish_subscribed_event(contact_list, contact, member)
 
-            # Add contact to list using the service method
-            member = self.contact_list_repository.add_contact_to_list(
-                contact_list_id, contact_id
-            )
-
-            if not member:
-                # This shouldn't happen after our checks, but handle it gracefully
-                raise ValueError(
-                    f"Failed to add contact {contact_id} to contact list {contact_list_id}"
-                )
-
-            # Publish subscription event
-            self._publish_subscribed_event(contact_list, contact, member)
-
-            return member
-
-        except Exception as e:
-            # Rollback the transaction if something goes wrong
-            self.db.rollback()
-            raise Exception(f"Failed to subscribe to contact list: {str(e)}")
+        return member
 
     def _publish_subscribed_event(
         self, contact_list: ContactList, contact: Contact, member: ContactListMember

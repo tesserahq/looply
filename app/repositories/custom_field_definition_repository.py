@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.db import savepoint
 from app.models.custom_field_definition import CustomFieldDefinition
 from app.repositories.soft_delete_repository import SoftDeleteRepository
 from app.schemas.custom_field_definition import (
@@ -65,11 +66,12 @@ class CustomFieldDefinitionRepository(SoftDeleteRepository[CustomFieldDefinition
             label=definition.label,
             created_by_id=definition.created_by_id,
         )
-        self.db.add(db_definition)
         try:
-            self.db.commit()
+            # Savepoint so a name conflict rolls back only this insert.
+            with savepoint(self.db):
+                self.db.add(db_definition)
+                self.db.flush()
         except IntegrityError as e:
-            self.db.rollback()
             raise CustomFieldDefinitionNameConflictError(
                 f"A custom field named {definition.name!r} already exists"
             ) from e
@@ -91,7 +93,7 @@ class CustomFieldDefinitionRepository(SoftDeleteRepository[CustomFieldDefinition
         if update.label is not None:
             db_definition.label = update.label
 
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(db_definition)
         return db_definition
 

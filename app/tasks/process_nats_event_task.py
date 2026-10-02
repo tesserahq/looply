@@ -41,7 +41,7 @@ from app.repositories.event_field_mapping_repository import (
 )
 from app.repositories.event_mapping_repository import EventMappingRepository
 from app.services.event_mapping_resolver import resolve as resolve_event_mappings
-from app.db import session_scope
+from app.db import savepoint, session_scope
 
 logger = logging.getLogger(__name__)
 
@@ -69,12 +69,15 @@ def _apply_custom_field_values(
     field_value_repository = ContactCustomFieldValueRepository(db)
     for field_name, value in custom_field_values.items():
         try:
-            field_value_repository.set_value(
-                contact_id=contact_id,
-                field_name=field_name,
-                value=value,
-                set_by_user_id=None,
-            )
+            # Savepoint: a skipped value must leave the event's transaction
+            # usable for the remaining values and the CustomEvent itself.
+            with savepoint(db):
+                field_value_repository.set_value(
+                    contact_id=contact_id,
+                    field_name=field_name,
+                    value=value,
+                    set_by_user_id=None,
+                )
         except (UndefinedCustomFieldError, CustomFieldValueTypeError) as e:
             logger.warning(
                 f"Custom field mapping could not be applied "

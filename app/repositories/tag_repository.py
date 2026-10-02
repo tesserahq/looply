@@ -2,10 +2,11 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.db import savepoint
 from app.models.tag import Tag
 from app.models.contact_tag import ContactTag
 from app.models.campaign_tag import CampaignTag
@@ -90,11 +91,12 @@ class TagRepository(SoftDeleteRepository[Tag]):
                 already exists.
         """
         db_tag = Tag(name=name.strip(), created_by_id=created_by_id)
-        self.db.add(db_tag)
         try:
-            self.db.commit()
+            # Savepoint so a name conflict rolls back only this insert.
+            with savepoint(self.db):
+                self.db.add(db_tag)
+                self.db.flush()
         except IntegrityError as e:
-            self.db.rollback()
             raise TagConflictError(f"Tag {name!r} already exists") from e
         self.db.refresh(db_tag)
         return db_tag
@@ -110,11 +112,12 @@ class TagRepository(SoftDeleteRepository[Tag]):
         tag = self.get_tag(tag_id)
         if not tag:
             return None
-        tag.name = name.strip()
         try:
-            self.db.commit()
+            # Savepoint so a name conflict rolls back only this rename.
+            with savepoint(self.db):
+                tag.name = name.strip()
+                self.db.flush()
         except IntegrityError as e:
-            self.db.rollback()
             raise TagConflictError(f"Tag {name!r} already exists") from e
         self.db.refresh(tag)
         return tag
@@ -128,14 +131,9 @@ class TagRepository(SoftDeleteRepository[Tag]):
         tag = self.get_tag(tag_id)
         if not tag:
             return False
-        self.db.query(ContactTag).filter(ContactTag.tag_id == tag_id).delete(
-            synchronize_session=False
-        )
-        self.db.query(CampaignTag).filter(CampaignTag.tag_id == tag_id).delete(
-            synchronize_session=False
-        )
+        self._execute_mutation(delete(ContactTag).where(ContactTag.tag_id == tag_id))
+        self._execute_mutation(delete(CampaignTag).where(CampaignTag.tag_id == tag_id))
         tag.deleted_at = datetime.now(timezone.utc)
-        self.db.commit()
         return True
 
     # -- Name-based resolution --------------------------------------------
@@ -201,13 +199,12 @@ class TagRepository(SoftDeleteRepository[Tag]):
         """Replace a contact's full tag set with `tag_names` (auto-creating
         any that don't exist yet)."""
         tags = self.get_or_create_tags(tag_names, created_by_id)
-        self.db.query(ContactTag).filter(ContactTag.contact_id == contact_id).delete(
-            synchronize_session=False
+        self._execute_mutation(
+            delete(ContactTag).where(ContactTag.contact_id == contact_id)
         )
         self.db.add_all(
             [ContactTag(contact_id=contact_id, tag_id=tag.id) for tag in tags]
         )
-        self.db.commit()
         return tags
 
     def get_contacts_by_tags_query(self, tag_names: List[str]):
@@ -243,11 +240,10 @@ class TagRepository(SoftDeleteRepository[Tag]):
         """Replace a campaign's full tag set with `tag_names` (auto-creating
         any that don't exist yet)."""
         tags = self.get_or_create_tags(tag_names, created_by_id)
-        self.db.query(CampaignTag).filter(
-            CampaignTag.campaign_id == campaign_id
-        ).delete(synchronize_session=False)
+        self._execute_mutation(
+            delete(CampaignTag).where(CampaignTag.campaign_id == campaign_id)
+        )
         self.db.add_all(
             [CampaignTag(campaign_id=campaign_id, tag_id=tag.id) for tag in tags]
         )
-        self.db.commit()
         return tags

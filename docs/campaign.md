@@ -12,15 +12,18 @@ queries, and manual recipient selection are future work.
 
 | Looply owns | Sendly owns |
 | --- | --- |
-| Campaign draft and status | Templates and layouts |
-| The segment defining the audience | Rendering and personalization |
+| Campaign draft and status | Layouts |
+| The campaign's email content (body, subject, sender, variables, layout reference) | Rendering and personalization (wrapping the body in the layout) |
+| The segment defining the audience | |
 | Resolving eligible contacts at send time | Suppression and unsubscribe checks |
 | Calling Sendly through `tessera-sdk` | Broadcast queueing and delivery |
 | The returned Sendly batch ID | Per-recipient delivery records and events |
 | A bounded-window cache of first-open/first-click timestamps and result counts | Sendly's full delivery-event history |
 
-Looply must not create its own email HTML or delivery jobs, and must not duplicate Sendly's full
-delivery-event history. The one deliberate, scoped exception is the narrow engagement cache
+Looply owns each campaign's email *body* but never renders it, and must not create its own
+delivery jobs or duplicate Sendly's full delivery-event history. Brand chrome lives in Sendly
+layouts, referenced by ID — never copied into a campaign — so a layout fix reaches every draft
+(see [PRD 0007](prds/0007-campaign-owned-email-content.md)). The one deliberate, scoped exception is the narrow engagement cache
 described in "Engagement cache" below: first-occurrence `opened_at`/`clicked_at` timestamps and
 campaign-level result counts, refreshed for a bounded window after a campaign completes. Sendly
 remains the source of truth for everything beyond that — per-event history, multiple
@@ -34,11 +37,13 @@ opens/clicks, bounces, complaints, and anything after the polling window closes.
 | `name` | Internal name |
 | `status` | `draft`, `sending`, `completed`, or `failed` |
 | `segment_id` | The segment whose resolved contact set defines this campaign's audience |
-| `project_id` | Project that owns the template and broadcast |
-| `template_id` | A live template reference |
-| `template_variables` | Shared variables for the template |
-| `from_email` | Optional sender override; Sendly uses the template default when omitted |
-| `subject` | Optional subject override; Sendly uses the template subject when omitted |
+| `project_id` | Project that owns the broadcast |
+| `html` | The email body (Mako); required to send |
+| `layout_id` | The Sendly layout the body is wrapped in; required to send |
+| `template_variables` | Shared variables for the body, layout, and subject |
+| `from_email` | Sender address; required to send |
+| `subject` | Subject line (Mako); required to send |
+| `template_id` | Legacy, read-only: the Sendly template the campaign pointed at before campaigns owned their content. Never used to send; dropped after the one-off backfill |
 | `tags` | Optional campaign tags forwarded to Sendly |
 | `batch_id` | Batch ID returned after the broadcast is accepted |
 | `sent_at` | When Sendly accepted the broadcast |
@@ -47,17 +52,22 @@ opens/clicks, bounces, complaints, and anything after the polling window closes.
 | `engagement_last_synced_at` | When engagement data was last *fully* refreshed from Sendly; `None` if no successful refresh has happened yet |
 | `engagement_polling_expires_at` | When Looply stops refreshing this campaign's engagement data (`completed_at` + the global polling window) |
 
-The template belongs to Sendly and remains live until the campaign is sent. Its layout is therefore also a Sendly concern; Looply stores neither a layout ID nor email HTML.
+The campaign owns its body; the layout belongs to Sendly. While the campaign is a draft, the
+`layout_id` reference is live — layout edits show up in it. When Sendly accepts the send it
+resolves the layout once and freezes it for the whole batch, so every recipient gets the same
+version and later layout edits don't change what was sent. No Sendly template is created per
+campaign, so deleting a campaign leaves nothing behind in Sendly.
 
 ## Send a campaign
 
 When a user sends a draft campaign, Looply:
 
-1. Resolves the campaign's segment to a contact set (see [Segments](segments.md)).
-2. Intersects that set with today's eligibility filter: active, with an email address, deduplicated by email.
-3. Converts each eligible contact into a Sendly broadcast recipient.
-4. Calls `SendlyClient.send_broadcast()` with the campaign's live template, variables, tags, and recipients.
-5. Stores the returned `batch_id`, changes the campaign to `sending`, and records the resolved contacts as `CampaignRecipient` rows (`campaign_id`, `contact_id`) — a snapshot of who the campaign was sent to, since the segment's resolved contact set can change afterward.
+1. Rejects the send, leaving the campaign a draft, if `html`, `layout_id`, `subject`, or `from_email` is missing — checked before anything else, since Sendly would reject an inline send without them and that would mark the campaign `failed`.
+2. Resolves the campaign's segment to a contact set (see [Segments](segments.md)).
+3. Intersects that set with today's eligibility filter: active, with an email address, deduplicated by email.
+4. Converts each eligible contact into a Sendly broadcast recipient.
+5. Calls `SendlyClient.send_broadcast()` with the campaign's inline `html`, `subject`, `layout_id`, variables, tags, and recipients.
+6. Stores the returned `batch_id`, changes the campaign to `sending`, and records the resolved contacts as `CampaignRecipient` rows (`campaign_id`, `contact_id`) — a snapshot of who the campaign was sent to, since the segment's resolved contact set can change afterward.
 
 Sendly then renders and sends asynchronously. It automatically excludes suppressed recipients.
 
@@ -71,7 +81,7 @@ Resolve segment -> intersect with active/has-email/dedup eligibility
 tessera-sdk: SendlyClient.send_broadcast()
           |
           v
-Sendly template/layout + suppression + broadcast delivery
+Sendly layout (frozen at accept) + rendering + suppression + broadcast delivery
 ```
 
 ### Recipient mapping
@@ -85,7 +95,7 @@ Looply passes the following contact data to Sendly:
 | `last_name` | `last_name` |
 | `company`, `job_title`, `contact_type` | `attributes` |
 
-Sendly merges each recipient's fields and `attributes` with the campaign's `template_variables` when rendering the template.
+Sendly merges each recipient's fields and `attributes` with the campaign's `template_variables` when rendering the body, layout, and subject.
 
 ### SDK call
 
@@ -98,7 +108,8 @@ from tessera_sdk.clients.sendly import (
 
 request = SendBroadcastRequest(
     project_id=campaign.project_id,
-    template_id=campaign.template_id,
+    html=campaign.html,
+    layout_id=campaign.layout_id,
     template_variables=campaign.template_variables,
     from_email=campaign.from_email,
     subject=campaign.subject,

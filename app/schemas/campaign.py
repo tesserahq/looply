@@ -17,19 +17,25 @@ class CampaignBase(BaseModel):
     """The segment defining this campaign's audience."""
 
     project_id: Optional[UUID] = None
-    """The Sendly project that owns the template and broadcast. Optional."""
+    """The Sendly project that owns the broadcast. Optional."""
 
-    template_id: Optional[UUID] = None
-    """A live Sendly template reference. Required to send, optional while drafting."""
+    html: Optional[str] = None
+    """The email body (Mako, rendered by Sendly with template_variables).
+    Required to send, optional while drafting."""
+
+    layout_id: Optional[UUID] = None
+    """The Sendly layout the body is wrapped in at send time. Required to
+    send, optional while drafting."""
 
     template_variables: dict = {}
-    """Shared variables forwarded to the Sendly template."""
+    """Shared variables available to the body, layout, and subject."""
 
     from_email: Optional[str] = None
-    """Optional sender override; Sendly uses the template default when omitted."""
+    """Sender address. Required to send, optional while drafting."""
 
     subject: Optional[str] = None
-    """Optional subject override; Sendly uses the template subject when omitted."""
+    """Subject line (Mako, rendered with template_variables). Required to
+    send, optional while drafting."""
 
     tags: list[str] = []
     """Tag names assigned to this campaign, forwarded to Sendly on send.
@@ -56,19 +62,25 @@ class CampaignCreateRequest(BaseModel):
     """The segment defining this campaign's audience."""
 
     project_id: Optional[UUID] = None
-    """The Sendly project that owns the template and broadcast. Optional."""
+    """The Sendly project that owns the broadcast. Optional."""
 
-    template_id: Optional[UUID] = None
-    """A live Sendly template reference. Required to send, optional while drafting."""
+    html: Optional[str] = None
+    """The email body (Mako, rendered by Sendly with template_variables).
+    Required to send, optional while drafting."""
+
+    layout_id: Optional[UUID] = None
+    """The Sendly layout the body is wrapped in at send time. Required to
+    send, optional while drafting."""
 
     template_variables: dict = {}
-    """Shared variables forwarded to the Sendly template."""
+    """Shared variables available to the body, layout, and subject."""
 
     from_email: Optional[str] = None
-    """Optional sender override; Sendly uses the template default when omitted."""
+    """Sender address. Required to send, optional while drafting."""
 
     subject: Optional[str] = None
-    """Optional subject override; Sendly uses the template subject when omitted."""
+    """Subject line (Mako, rendered with template_variables). Required to
+    send, optional while drafting."""
 
     tags: list[str] = []
     """Tag names assigned to this campaign, forwarded to Sendly on send.
@@ -93,17 +105,20 @@ class CampaignUpdate(BaseModel):
     project_id: Optional[UUID] = None
     """Updated Sendly project reference."""
 
-    template_id: Optional[UUID] = None
-    """Updated Sendly template reference."""
+    html: Optional[str] = None
+    """Updated email body."""
+
+    layout_id: Optional[UUID] = None
+    """Updated Sendly layout reference."""
 
     template_variables: Optional[dict] = None
     """Updated template variables."""
 
     from_email: Optional[str] = None
-    """Updated sender override."""
+    """Updated sender address."""
 
     subject: Optional[str] = None
-    """Updated subject override."""
+    """Updated subject line."""
 
     tags: Optional[list[str]] = None
     """Updated campaign tags."""
@@ -117,6 +132,11 @@ class CampaignInDB(CampaignBase):
 
     status: str
     """Campaign lifecycle status: draft, sending, completed, or failed."""
+
+    template_id: Optional[UUID] = None
+    """Legacy, read-only: the Sendly template this campaign pointed at before
+    campaigns owned their content. Never used to send; kept until the
+    one-off backfill has copied its content into html/subject/layout_id."""
 
     batch_id: Optional[str] = None
     """Batch ID returned by Sendly after the broadcast is accepted."""

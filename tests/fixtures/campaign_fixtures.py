@@ -17,7 +17,10 @@ def draft_campaign(db, faker, test_user, test_segment):
         # set it here so send-path tests exercise real request construction.
         # Once the SDK makes it optional, this can be dropped to also cover that path.
         "project_id": uuid4(),
-        "template_id": uuid4(),
+        "html": "<p>${greeting} ${first_name}</p>",
+        "layout_id": uuid4(),
+        "subject": "${greeting} from Looply",
+        "from_email": "news@example.com",
         "template_variables": {"greeting": "Hello"},
         "created_by_id": test_user.id,
     }
@@ -38,7 +41,10 @@ def sending_campaign(db, faker, test_user, test_segment):
         "status": CampaignStatus.SENDING.value,
         "segment_id": test_segment.id,
         "project_id": uuid4(),
-        "template_id": uuid4(),
+        "html": "<p>Hi</p>",
+        "layout_id": uuid4(),
+        "subject": "Hi",
+        "from_email": "news@example.com",
         "batch_id": faker.uuid4(),
         "created_by_id": test_user.id,
     }

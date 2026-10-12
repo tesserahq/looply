@@ -58,6 +58,10 @@ resolves the layout once and freezes it for the whole batch, so every recipient 
 version and later layout edits don't change what was sent. No Sendly template is created per
 campaign, so deleting a campaign leaves nothing behind in Sendly.
 
+## Duplicate a campaign
+
+`POST /campaigns/{id}/duplicate` (gated as `create`) copies any campaign, whatever its status, into a new `draft` owned by the caller, named "Copy of <name>". It copies what the user authored: segment, project, subject, `html`, `layout_id`, sender, `template_variables`, and tags. It copies nothing the send produced: no `batch_id`, timestamps, engagement counts, or recipients. This is how a past email is reused as a starting point, instead of a Sendly template. A source that hasn't been backfilled yet (`template_id` and no `html`) passes its `template_id` to the copy, so the copy isn't empty and migrates the same way the source will.
+
 ## Send a campaign
 
 When a user sends a draft campaign, Looply:

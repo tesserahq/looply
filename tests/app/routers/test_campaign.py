@@ -271,3 +271,32 @@ def test_list_campaign_recipients_excludes_soft_deleted_contact(
     data = response.json()
     assert data["items"] == []
     assert data["total"] == 0
+
+
+def test_duplicate_campaign(client_test_user: TestClient, draft_campaign, test_user):
+    response = client_test_user.post(f"/campaigns/{draft_campaign.id}/duplicate")
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["id"] != str(draft_campaign.id)
+    assert data["name"] == f"Copy of {draft_campaign.name}"
+    assert data["status"] == CampaignStatus.DRAFT.value
+    assert data["html"] == draft_campaign.html
+    assert data["layout_id"] == str(draft_campaign.layout_id)
+    assert data["created_by_id"] == str(test_user.id)
+
+
+def test_duplicate_sent_campaign_gives_a_clean_draft(
+    client_test_user: TestClient, sending_campaign
+):
+    response = client_test_user.post(f"/campaigns/{sending_campaign.id}/duplicate")
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == CampaignStatus.DRAFT.value
+    assert data["batch_id"] is None
+
+
+def test_duplicate_campaign_not_found(client_test_user: TestClient):
+    response = client_test_user.post(f"/campaigns/{uuid4()}/duplicate")
+    assert response.status_code == 404

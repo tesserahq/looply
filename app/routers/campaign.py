@@ -20,6 +20,7 @@ from app.routers.utils.dependencies import get_campaign_by_id
 from app.schemas.user import User
 from tessera_sdk.server.dependencies.auth import get_current_user
 from app.auth.rbac import build_rbac_dependencies
+from app.commands.campaign.duplicate_campaign_command import DuplicateCampaignCommand
 from app.commands.campaign.send_campaign_command import SendCampaignCommand
 
 router = APIRouter(
@@ -140,6 +141,24 @@ def delete_campaign(
 ):
     """Delete a campaign."""
     CampaignRepository(db).delete_campaign(existing_campaign.id)
+
+
+@router.post(
+    "/{campaign_id}/duplicate",
+    response_model=Campaign,
+    status_code=status.HTTP_201_CREATED,
+)
+def duplicate_campaign(
+    db: DbSession,
+    campaign: CampaignModel = Depends(get_campaign_by_id),
+    current_user: User = Depends(get_current_user),
+    # Duplicating creates a campaign, so it's gated as create.
+    _authorized: bool = Depends(rbac["create"]),
+):
+    """Copy a campaign's content and audience into a new draft owned by the
+    current user. Send history, engagement counts, and recipients are not
+    copied."""
+    return DuplicateCampaignCommand(db).execute(campaign.id, current_user.id)
 
 
 @router.post(

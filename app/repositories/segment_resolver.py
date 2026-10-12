@@ -8,7 +8,17 @@ audience can never independently drift - see
 docs/prds/0001-campaign-segments.md's "Segment repository/resolver" section.
 """
 
-from sqlalchemy import Boolean, Date, Numeric, Text, and_, func, or_, select
+from sqlalchemy import (
+    Boolean,
+    Date,
+    Numeric,
+    Text,
+    and_,
+    func,
+    literal_column,
+    or_,
+    select,
+)
 from sqlalchemy.orm import Query, Session
 
 from app.constants.campaign import CampaignStatus
@@ -76,9 +86,11 @@ ALLOWED_OPS_BY_VALUE_TYPE: dict[FieldValueType, frozenset[ContactFieldOp]] = {
 # work directly against a JSONB column. `astext` only applies after a path/key
 # index (col['key'].astext); for a whole-document scalar we extract the text
 # via the `#>>'{}'` operator instead, then cast to the right SQL type per
-# value_type before applying an operator.
+# value_type before applying an operator. The empty path is inlined as a
+# typed literal rather than bound: psycopg 3 binds a plain "{}" as VARCHAR,
+# and Postgres has no `jsonb #>> varchar` operator (it needs text[]).
 def _as_text(col):
-    return col.op("#>>", return_type=Text)("{}")
+    return col.op("#>>", return_type=Text)(literal_column("'{}'::text[]"))
 
 
 CAST_BY_VALUE_TYPE = {

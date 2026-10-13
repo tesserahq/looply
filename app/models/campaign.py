@@ -39,11 +39,6 @@ class Campaign(Base, TimestampMixin, SoftDeleteMixin):
     # template is created per campaign.
     html: Mapped[str | None] = mapped_column(Text, nullable=True)
     layout_id: Mapped[UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    # Legacy: a Sendly template reference from before campaigns owned their
-    # content. Read-only — never set by the API or used to send; kept only so
-    # the one-off backfill can copy the template's content into html/subject/
-    # layout_id. Dropped once that backfill and the template cleanup are done.
-    template_id: Mapped[UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     template_variables: Mapped[dict] = mapped_column(
         JSONB, nullable=False, default=dict
     )

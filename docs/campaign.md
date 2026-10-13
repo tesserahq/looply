@@ -43,7 +43,6 @@ opens/clicks, bounces, complaints, and anything after the polling window closes.
 | `template_variables` | Shared variables for the body, layout, and subject |
 | `from_email` | Sender address; required to send |
 | `subject` | Subject line (Mako); required to send |
-| `template_id` | Legacy, read-only: the Sendly template the campaign pointed at before campaigns owned their content. Never used to send; dropped after the one-off backfill |
 | `tags` | Optional campaign tags forwarded to Sendly |
 | `batch_id` | Batch ID returned after the broadcast is accepted |
 | `sent_at` | When Sendly accepted the broadcast |

@@ -28,22 +28,6 @@ def test_create_campaign(client_test_user: TestClient, faker, test_segment):
     assert data["layout_id"] == payload["layout_id"]
 
 
-def test_create_campaign_ignores_template_id(
-    client_test_user: TestClient, faker, test_segment
-):
-    # template_id is legacy and read-only: campaigns own their content now,
-    # so the API never links a campaign to a Sendly template.
-    payload = {
-        "name": faker.catch_phrase(),
-        "segment_id": str(test_segment.id),
-        "template_id": str(uuid4()),
-    }
-
-    response = client_test_user.post("/campaigns", json=payload)
-    assert response.status_code == 201
-    assert response.json()["template_id"] is None
-
-
 def test_update_draft_campaign_content(client_test_user: TestClient, draft_campaign):
     new_layout_id = str(uuid4())
     response = client_test_user.put(

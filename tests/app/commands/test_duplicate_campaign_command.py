@@ -86,27 +86,6 @@ def test_variables_are_copied_not_shared(db, draft_campaign, test_user):
     assert draft_campaign.template_variables == {"greeting": "Hello"}
 
 
-def test_not_yet_backfilled_source_carries_its_template(db, draft_campaign, test_user):
-    legacy_template_id = uuid4()
-    draft_campaign.html = None
-    draft_campaign.template_id = legacy_template_id
-    db.commit()
-
-    copy = DuplicateCampaignCommand(db).execute(draft_campaign.id, test_user.id)
-
-    assert copy.html is None
-    assert copy.template_id == legacy_template_id
-
-
-def test_backfilled_source_does_not_carry_its_template(db, draft_campaign, test_user):
-    draft_campaign.template_id = uuid4()
-    db.commit()
-
-    copy = DuplicateCampaignCommand(db).execute(draft_campaign.id, test_user.id)
-
-    assert copy.template_id is None
-
-
 def test_unknown_campaign_raises(db, test_user):
     with pytest.raises(ValueError, match="not found"):
         DuplicateCampaignCommand(db).execute(uuid4(), test_user.id)

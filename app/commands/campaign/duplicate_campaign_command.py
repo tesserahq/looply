@@ -52,10 +52,4 @@ class DuplicateCampaignCommand:
             )
         )
 
-        # A source not yet backfilled still keeps its content in a legacy
-        # Sendly template. Carry that reference so the copy isn't empty — it
-        # migrates the same way the source will (editing it, or the backfill).
-        if not source.html and source.template_id:
-            duplicate.template_id = source.template_id
-
         return duplicate

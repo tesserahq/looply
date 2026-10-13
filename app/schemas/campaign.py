@@ -133,11 +133,6 @@ class CampaignInDB(CampaignBase):
     status: str
     """Campaign lifecycle status: draft, sending, completed, or failed."""
 
-    template_id: Optional[UUID] = None
-    """Legacy, read-only: the Sendly template this campaign pointed at before
-    campaigns owned their content. Never used to send; kept until the
-    one-off backfill has copied its content into html/subject/layout_id."""
-
     batch_id: Optional[str] = None
     """Batch ID returned by Sendly after the broadcast is accepted."""
 

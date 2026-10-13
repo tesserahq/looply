@@ -5,6 +5,10 @@ campaign itself (docs/prds/0007-campaign-owned-email-content.md, issue #178).
     ENV=<env> poetry run python scripts/backfill_campaign_content.py            # dry run
     ENV=<env> poetry run python scripts/backfill_campaign_content.py --apply
 
+The production image has no Poetry, but its venv is on PATH, so inside a
+Looply container (ENV and credentials already set) run it with plain python
+and write the report somewhere that exists, e.g. --report /tmp/report.json.
+
 Dry run by default: writes nothing, prints a summary, and writes a JSON
 report (--report, default backfill_campaign_content_report.json) with, per
 campaign, the fields it would copy and anything to review first
@@ -231,7 +235,9 @@ def main() -> int:
     ]
 
     report = build_report(campaigns, plans, templates, missing)
-    Path(args.report).write_text(json.dumps(report, indent=2))
+    report_path = Path(args.report)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report, indent=2))
 
     flagged = [p for p in plans if p.findings]
     auto = sum(1 for c in report["cleanup"] if c["classification"] == "auto-generated")

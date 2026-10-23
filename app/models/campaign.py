@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.mixins import TimestampMixin, SoftDeleteMixin
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 import uuid
 
@@ -29,11 +29,16 @@ class Campaign(Base, TimestampMixin, SoftDeleteMixin):
     segment_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("segments.id"), nullable=False
     )
-    # project_id and template_id reference Sendly's own domain, not local tables,
+    # project_id and layout_id reference Sendly's own domain, not local tables,
     # so they are plain columns rather than foreign keys. Both are nullable so a
-    # campaign can be drafted before its Sendly project/template is finalized.
+    # campaign can be drafted before they're chosen; SendCampaignCommand
+    # requires layout_id (and html/subject/from_email) to send.
     project_id: Mapped[UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    template_id: Mapped[UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    # The campaign owns its email body (see docs/prds/0007): sent to Sendly
+    # inline, wrapped in the Sendly layout `layout_id` at send time. No Sendly
+    # template is created per campaign.
+    html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    layout_id: Mapped[UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     template_variables: Mapped[dict] = mapped_column(
         JSONB, nullable=False, default=dict
     )

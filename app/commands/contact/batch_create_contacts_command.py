@@ -5,6 +5,7 @@ from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 
+from app.db import on_commit
 from app.models.contact import Contact
 from app.schemas.contact import ContactCreate, ContactCreateRequest
 from app.repositories.contact_repository import ContactRepository
@@ -48,42 +49,31 @@ class BatchCreateContactsCommand:
             ValueError: If any phone already exists
             ValueError: If there are duplicate emails/phones within the batch
         """
-        try:
-            if not contacts_data:
-                raise ValueError("No contacts provided")
+        if not contacts_data:
+            raise ValueError("No contacts provided")
 
-            # Validate all contacts before creating any
-            self._validate_contacts(contacts_data)
+        # Validate all contacts before creating any
+        self._validate_contacts(contacts_data)
 
-            # Prepare all contacts for bulk creation
-            contact_creates = [
-                ContactCreate(**contact_data.model_dump(), created_by_id=created_by_id)
-                for contact_data in contacts_data
-            ]
+        # Prepare all contacts for bulk creation
+        contact_creates = [
+            ContactCreate(**contact_data.model_dump(), created_by_id=created_by_id)
+            for contact_data in contacts_data
+        ]
 
-            # Bulk create all contacts
-            created_contacts = self.contact_repository.bulk_create_contacts(
-                contact_creates
+        # Bulk create all contacts
+        created_contacts = self.contact_repository.bulk_create_contacts(contact_creates)
+
+        if len(created_contacts) != len(contacts_data):
+            raise ValueError(
+                f"Failed to create all contacts. Expected {len(contacts_data)}, got {len(created_contacts)}"
             )
 
-            if len(created_contacts) != len(contacts_data):
-                raise ValueError(
-                    f"Failed to create all contacts. Expected {len(contacts_data)}, got {len(created_contacts)}"
-                )
+        # Publish contact created events for all contacts
+        for contact in created_contacts:
+            self._publish_contact_created_event(contact)
 
-            # Publish contact created events for all contacts
-            for contact in created_contacts:
-                self._publish_contact_created_event(contact)
-
-            return created_contacts
-
-        except ValueError:
-            # Re-raise ValueError as-is (these are expected validation errors)
-            raise
-        except Exception as e:
-            # Rollback the transaction if something goes wrong
-            self.db.rollback()
-            raise Exception(f"Failed to batch create contacts: {str(e)}")
+        return created_contacts
 
     def _validate_contacts(self, contacts_data: List[ContactCreateRequest]) -> None:
         """
@@ -138,7 +128,15 @@ class BatchCreateContactsCommand:
         """
         event = build_contact_created_event(contact)
         if self.nats_publisher is not None:
-            try:
-                self.nats_publisher.publish_sync(event, event.event_type)
-            except Exception:  # pragma: no cover - defensive logging
-                self.logger.exception("Failed to publish contact-created event to NATS")
+            publisher = self.nats_publisher
+
+            def publish() -> None:
+                try:
+                    publisher.publish_sync(event, event.event_type)
+                except Exception:  # pragma: no cover - defensive logging
+                    self.logger.exception(
+                        "Failed to publish contact-created event to NATS"
+                    )
+
+            # Dispatch only after the transaction commits; dropped on rollback.
+            on_commit(publish)

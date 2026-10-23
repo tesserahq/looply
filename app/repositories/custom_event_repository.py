@@ -33,7 +33,7 @@ class CustomEventRepository:
             raw_envelope=raw_envelope,
         )
         self.db.add(event)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(event)
         return event
 

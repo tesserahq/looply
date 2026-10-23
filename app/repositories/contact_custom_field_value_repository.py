@@ -101,7 +101,7 @@ class ContactCustomFieldValueRepository:
         if existing:
             existing.value = value
             existing.set_by_user_id = set_by_user_id
-            self.db.commit()
+            self.db.flush()
             self.db.refresh(existing)
             return existing
 
@@ -112,7 +112,7 @@ class ContactCustomFieldValueRepository:
             set_by_user_id=set_by_user_id,
         )
         self.db.add(new_value)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(new_value)
         return new_value
 
@@ -149,5 +149,4 @@ class ContactCustomFieldValueRepository:
         if not value:
             return False
         self.db.delete(value)
-        self.db.commit()
         return True

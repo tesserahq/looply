@@ -1,7 +1,6 @@
-from fastapi import Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 from uuid import UUID
-from app.db import get_db
+from app.db import DbSession
 from app.repositories.contact_repository import ContactRepository
 from app.repositories.campaign_repository import CampaignRepository
 from app.repositories.segment_repository import SegmentRepository
@@ -24,7 +23,7 @@ from app.models.custom_event import CustomEvent
 from app.models.tag import Tag
 
 
-def get_contact_by_id(contact_id: UUID, db: Session = Depends(get_db)) -> Contact:
+def get_contact_by_id(contact_id: UUID, db: DbSession) -> Contact:
     """
     Dependency to get a contact by ID.
     Raises 404 if contact is not found.
@@ -48,9 +47,7 @@ def get_contact_by_id(contact_id: UUID, db: Session = Depends(get_db)) -> Contac
     return contact
 
 
-def get_contact_by_external_id(
-    external_id: str, db: Session = Depends(get_db)
-) -> Contact:
+def get_contact_by_external_id(external_id: str, db: DbSession) -> Contact:
     """
     Dependency to get a contact by its external host platform identity.
     Raises 404 if no contact with that external_id exists - field writes don't carry
@@ -77,7 +74,7 @@ def get_contact_by_external_id(
     return contact
 
 
-def get_campaign_by_id(campaign_id: UUID, db: Session = Depends(get_db)) -> Campaign:
+def get_campaign_by_id(campaign_id: UUID, db: DbSession) -> Campaign:
     """
     Dependency to get a campaign by ID.
     Raises 404 if campaign is not found.
@@ -101,7 +98,7 @@ def get_campaign_by_id(campaign_id: UUID, db: Session = Depends(get_db)) -> Camp
     return campaign
 
 
-def get_segment_by_id(segment_id: UUID, db: Session = Depends(get_db)) -> Segment:
+def get_segment_by_id(segment_id: UUID, db: DbSession) -> Segment:
     """
     Dependency to get a segment by ID.
     Raises 404 if segment is not found.
@@ -126,7 +123,7 @@ def get_segment_by_id(segment_id: UUID, db: Session = Depends(get_db)) -> Segmen
 
 
 def get_custom_field_definition_by_id(
-    definition_id: UUID, db: Session = Depends(get_db)
+    definition_id: UUID, db: DbSession
 ) -> CustomFieldDefinition:
     """
     Dependency to get a custom field definition by ID.
@@ -151,9 +148,7 @@ def get_custom_field_definition_by_id(
     return definition
 
 
-def get_event_mapping_by_id(
-    event_mapping_id: UUID, db: Session = Depends(get_db)
-) -> EventMapping:
+def get_event_mapping_by_id(event_mapping_id: UUID, db: DbSession) -> EventMapping:
     """
     Dependency to get an event mapping by ID.
     Raises 404 if not found (or soft-deleted).
@@ -178,7 +173,7 @@ def get_event_mapping_by_id(
 
 
 def get_event_field_mapping_by_id(
-    event_mapping_id: UUID, mapping_id: UUID, db: Session = Depends(get_db)
+    event_mapping_id: UUID, mapping_id: UUID, db: DbSession
 ) -> EventFieldMapping:
     """
     Dependency to get an event-to-field mapping by ID, scoped to its parent
@@ -205,9 +200,7 @@ def get_event_field_mapping_by_id(
     return mapping
 
 
-def get_custom_event_by_id(
-    event_id: UUID, db: Session = Depends(get_db)
-) -> CustomEvent:
+def get_custom_event_by_id(event_id: UUID, db: DbSession) -> CustomEvent:
     """
     Dependency to get a custom event by ID.
     Raises 404 if not found.
@@ -230,7 +223,7 @@ def get_custom_event_by_id(
     return event
 
 
-def get_tag_by_id(tag_id: UUID, db: Session = Depends(get_db)) -> Tag:
+def get_tag_by_id(tag_id: UUID, db: DbSession) -> Tag:
     """
     Dependency to get a tag by ID.
     Raises 404 if not found (or soft-deleted).

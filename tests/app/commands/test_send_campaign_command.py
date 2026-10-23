@@ -51,6 +51,14 @@ def test_send_campaign_success(db, draft_campaign, test_contact_list, test_conta
 
     # idempotency_key must be derived purely from the campaign id
     sent_request = fake_client.calls[0]
+    # The campaign's own content goes inline with its layout; no template.
+    assert sent_request.html == draft_campaign.html
+    assert sent_request.layout_id == draft_campaign.layout_id
+    assert sent_request.subject == draft_campaign.subject
+    assert str(sent_request.from_email) == draft_campaign.from_email
+    assert sent_request.template_variables == {"greeting": "Hello"}
+    assert sent_request.template_id is None
+    assert sent_request.template_alias is None
     assert sent_request.idempotency_key == f"campaign:{draft_campaign.id}"
     assert len(sent_request.recipients) == 1
     assert sent_request.recipients[0].email == test_contact.email
@@ -80,13 +88,35 @@ def test_send_campaign_not_draft(db, sending_campaign):
         command.execute(sending_campaign.id)
 
 
-def test_send_campaign_no_template_id(db, draft_campaign):
-    draft_campaign.template_id = None
+@pytest.mark.parametrize("field", ["html", "layout_id", "subject", "from_email"])
+def test_send_campaign_missing_content_is_rejected_before_sendly(
+    db, draft_campaign, test_contact_list, test_contact, field
+):
+    _add_eligible_contact(db, test_contact_list, test_contact)
+    setattr(draft_campaign, field, None)
+    db.commit()
+
+    fake_client = FakeSendlyClient()
+    command = SendCampaignCommand(db, sendly_client=fake_client)
+
+    with pytest.raises(ValueError, match=field):
+        command.execute(draft_campaign.id)
+
+    # Still a fixable draft: Sendly was never called, so nothing moved it
+    # to 'failed'.
+    assert fake_client.calls == []
+    db.refresh(draft_campaign)
+    assert draft_campaign.status == CampaignStatus.DRAFT.value
+
+
+def test_send_campaign_missing_content_names_every_missing_field(db, draft_campaign):
+    draft_campaign.html = None
+    draft_campaign.layout_id = None
     db.commit()
 
     command = SendCampaignCommand(db, sendly_client=FakeSendlyClient())
 
-    with pytest.raises(ValueError, match="template_id"):
+    with pytest.raises(ValueError, match="html, layout_id"):
         command.execute(draft_campaign.id)
 
 

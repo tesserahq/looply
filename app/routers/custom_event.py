@@ -2,11 +2,10 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
 
-from app.db import get_db
+from app.db import DbSession
 from app.models.contact import Contact
 from app.models.custom_event import CustomEvent as CustomEventModel
 from app.schemas.custom_event import CustomEvent
@@ -39,9 +38,9 @@ rbac = build_rbac_dependencies(resource=RESOURCE)
 
 @router.get("", response_model=Page[CustomEvent])
 def list_custom_events(
+    db: DbSession,
     name: Optional[str] = None,
     contact_id: Optional[UUID] = None,
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List all custom events, most recent first, with pagination - optionally
@@ -65,9 +64,9 @@ def get_custom_event(
 
 @nested_router.get("", response_model=list[CustomEvent])
 def list_contact_custom_events(
+    db: DbSession,
     name: Optional[str] = None,
     contact: Contact = Depends(get_contact_by_external_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List a contact's event history, most recent first, optionally filtered by

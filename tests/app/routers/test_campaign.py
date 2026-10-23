@@ -11,7 +11,10 @@ def test_create_campaign(client_test_user: TestClient, faker, test_segment):
     payload = {
         "name": faker.catch_phrase(),
         "segment_id": str(test_segment.id),
-        "template_id": str(uuid4()),
+        "html": "<p>Hi ${first_name}</p>",
+        "layout_id": str(uuid4()),
+        "subject": "Hello",
+        "from_email": "news@example.com",
     }
 
     response = client_test_user.post("/campaigns", json=payload)
@@ -21,6 +24,22 @@ def test_create_campaign(client_test_user: TestClient, faker, test_segment):
     assert data["name"] == payload["name"]
     assert data["status"] == CampaignStatus.DRAFT.value
     assert data["id"] is not None
+    assert data["html"] == payload["html"]
+    assert data["layout_id"] == payload["layout_id"]
+
+
+def test_update_draft_campaign_content(client_test_user: TestClient, draft_campaign):
+    new_layout_id = str(uuid4())
+    response = client_test_user.put(
+        f"/campaigns/{draft_campaign.id}",
+        json={"html": "<p>Updated</p>", "layout_id": new_layout_id},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["html"] == "<p>Updated</p>"
+    assert data["layout_id"] == new_layout_id
+    # Fields not sent are left alone.
+    assert data["subject"] == draft_campaign.subject
 
 
 def test_create_campaign_invalid_segment_returns_404(
@@ -236,3 +255,32 @@ def test_list_campaign_recipients_excludes_soft_deleted_contact(
     data = response.json()
     assert data["items"] == []
     assert data["total"] == 0
+
+
+def test_duplicate_campaign(client_test_user: TestClient, draft_campaign, test_user):
+    response = client_test_user.post(f"/campaigns/{draft_campaign.id}/duplicate")
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["id"] != str(draft_campaign.id)
+    assert data["name"] == f"Copy of {draft_campaign.name}"
+    assert data["status"] == CampaignStatus.DRAFT.value
+    assert data["html"] == draft_campaign.html
+    assert data["layout_id"] == str(draft_campaign.layout_id)
+    assert data["created_by_id"] == str(test_user.id)
+
+
+def test_duplicate_sent_campaign_gives_a_clean_draft(
+    client_test_user: TestClient, sending_campaign
+):
+    response = client_test_user.post(f"/campaigns/{sending_campaign.id}/duplicate")
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == CampaignStatus.DRAFT.value
+    assert data["batch_id"] is None
+
+
+def test_duplicate_campaign_not_found(client_test_user: TestClient):
+    response = client_test_user.post(f"/campaigns/{uuid4()}/duplicate")
+    assert response.status_code == 404

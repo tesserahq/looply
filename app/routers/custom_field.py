@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from uuid import UUID
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
 
-from app.db import get_db
+from app.db import DbSession
 from app.models.contact import Contact
 from app.models.custom_field_definition import (
     CustomFieldDefinition as CustomFieldDefinitionModel,
@@ -59,7 +58,7 @@ rbac = build_rbac_dependencies(resource=RESOURCE)
 )
 def create_custom_field_definition(
     definition_data: CustomFieldDefinitionCreateRequest,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -77,7 +76,7 @@ def create_custom_field_definition(
 
 @router.get("", response_model=Page[CustomFieldDefinition])
 def list_custom_field_definitions(
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List all active custom field definitions with pagination."""
@@ -96,8 +95,8 @@ def get_custom_field_definition(
 @router.put("/{definition_id}", response_model=CustomFieldDefinition)
 def update_custom_field_definition(
     update_data: CustomFieldDefinitionUpdate,
+    db: DbSession,
     definition: CustomFieldDefinitionModel = Depends(get_custom_field_definition_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Update a custom field definition's label - the only mutable attribute.
@@ -110,7 +109,7 @@ def update_custom_field_definition(
 @router.delete("/{definition_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_custom_field_definition(
     definition_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["delete"]),
 ):
     """Soft delete a custom field definition. Its values stop appearing in a
@@ -126,8 +125,8 @@ def delete_custom_field_definition(
 def set_contact_custom_field_value(
     field_name: str,
     value_data: ContactCustomFieldValueWrite,
+    db: DbSession,
     contact: Contact = Depends(get_contact_by_external_id),
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["update"]),
 ):
@@ -153,8 +152,8 @@ def set_contact_custom_field_value(
 
 @nested_router.get("", response_model=list[ContactCustomFieldValue])
 def list_contact_custom_field_values(
+    db: DbSession,
     contact: Contact = Depends(get_contact_by_external_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List a contact's current custom field values."""
@@ -164,8 +163,8 @@ def list_contact_custom_field_values(
 @nested_router.delete("/{field_name}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_contact_custom_field_value(
     field_name: str,
+    db: DbSession,
     contact: Contact = Depends(get_contact_by_external_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["delete"]),
 ):
     """Delete a contact's value for a named field - a manual correction, distinct

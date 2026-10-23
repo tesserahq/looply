@@ -5,6 +5,7 @@ from typing import Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 
+from app.db import on_commit
 from app.models.contact import Contact
 from app.schemas.contact import ContactUpdate
 from app.schemas.user import User
@@ -50,61 +51,49 @@ class UpdateContactCommand:
             ValueError: If phone already exists for another contact
             ValueError: If contact is not found
         """
-        try:
-            # Check if contact exists
-            existing_contact = self.contact_repository.get_contact(contact_id)
-            if not existing_contact:
-                raise ValueError("Contact not found")
+        # Check if contact exists
+        existing_contact = self.contact_repository.get_contact(contact_id)
+        if not existing_contact:
+            raise ValueError("Contact not found")
 
-            # Check if email is being updated and already exists
-            if contact_data.email:
-                contact_with_email = self.contact_repository.get_contact_by_email(
-                    contact_data.email
-                )
-                if contact_with_email and contact_with_email.id != contact_id:
-                    raise ValueError("Email already registered")
-
-            # Check if phone is being updated and already exists
-            if contact_data.phone:
-                contact_with_phone = self.contact_repository.get_contact_by_phone(
-                    contact_data.phone
-                )
-                if contact_with_phone and contact_with_phone.id != contact_id:
-                    raise ValueError("Phone number already registered")
-
-            # Check if external_id is being updated and already exists
-            if contact_data.external_id:
-                contact_with_external_id = (
-                    self.contact_repository.get_contact_by_external_id(
-                        contact_data.external_id
-                    )
-                )
-                if (
-                    contact_with_external_id
-                    and contact_with_external_id.id != contact_id
-                ):
-                    raise ValueError("External ID already registered")
-
-            # Update contact
-            updated_contact = self.contact_repository.update_contact(
-                contact_id, contact_data
+        # Check if email is being updated and already exists
+        if contact_data.email:
+            contact_with_email = self.contact_repository.get_contact_by_email(
+                contact_data.email
             )
+            if contact_with_email and contact_with_email.id != contact_id:
+                raise ValueError("Email already registered")
 
-            if not updated_contact:
-                raise ValueError(f"Failed to update contact {contact_id}")
+        # Check if phone is being updated and already exists
+        if contact_data.phone:
+            contact_with_phone = self.contact_repository.get_contact_by_phone(
+                contact_data.phone
+            )
+            if contact_with_phone and contact_with_phone.id != contact_id:
+                raise ValueError("Phone number already registered")
 
-            # Publish contact updated event
-            self._publish_contact_updated_event(updated_contact, current_user.id)
+        # Check if external_id is being updated and already exists
+        if contact_data.external_id:
+            contact_with_external_id = (
+                self.contact_repository.get_contact_by_external_id(
+                    contact_data.external_id
+                )
+            )
+            if contact_with_external_id and contact_with_external_id.id != contact_id:
+                raise ValueError("External ID already registered")
 
-            return updated_contact
+        # Update contact
+        updated_contact = self.contact_repository.update_contact(
+            contact_id, contact_data
+        )
 
-        except ValueError:
-            # Re-raise ValueError as-is (these are expected validation errors)
-            raise
-        except Exception as e:
-            # Rollback the transaction if something goes wrong
-            self.db.rollback()
-            raise Exception(f"Failed to update contact: {str(e)}")
+        if not updated_contact:
+            raise ValueError(f"Failed to update contact {contact_id}")
+
+        # Publish contact updated event
+        self._publish_contact_updated_event(updated_contact, current_user.id)
+
+        return updated_contact
 
     def _publish_contact_updated_event(self, contact: Contact, user_id: UUID) -> None:
         """
@@ -116,7 +105,15 @@ class UpdateContactCommand:
         """
         event = build_contact_updated_event(contact, user_id)
         if self.nats_publisher is not None:
-            try:
-                self.nats_publisher.publish_sync(event, event.event_type)
-            except Exception:  # pragma: no cover - defensive logging
-                self.logger.exception("Failed to publish contact-updated event to NATS")
+            publisher = self.nats_publisher
+
+            def publish() -> None:
+                try:
+                    publisher.publish_sync(event, event.event_type)
+                except Exception:  # pragma: no cover - defensive logging
+                    self.logger.exception(
+                        "Failed to publish contact-updated event to NATS"
+                    )
+
+            # Dispatch only after the transaction commits; dropped on rollback.
+            on_commit(publish)

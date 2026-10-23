@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.db import savepoint
 from app.models.event_field_mapping import EventFieldMapping
 from app.models.event_mapping import IDENTITY_KEY_TARGETS, EventMapping
 from app.repositories.soft_delete_repository import SoftDeleteRepository
@@ -80,11 +81,12 @@ class EventMappingRepository(SoftDeleteRepository[EventMapping]):
             default_tags=event_mapping.default_tags,
             created_by_id=event_mapping.created_by_id,
         )
-        self.db.add(db_event_mapping)
         try:
-            self.db.commit()
+            # Savepoint so a duplicate event type rolls back only this insert.
+            with savepoint(self.db):
+                self.db.add(db_event_mapping)
+                self.db.flush()
         except IntegrityError as e:
-            self.db.rollback()
             raise EventMappingConflictError(
                 f"Event type {event_mapping.event_type!r} is already registered"
             ) from e
@@ -113,7 +115,7 @@ class EventMappingRepository(SoftDeleteRepository[EventMapping]):
 
         _validate_identity_target_field(db_event_mapping.identity_target_field)
 
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(db_event_mapping)
         return db_event_mapping
 
@@ -134,8 +136,8 @@ class EventMappingRepository(SoftDeleteRepository[EventMapping]):
                 another active row.
         """
         # Read before adding the clone below - accessing this lazy relationship
-        # after that add() would autoflush the pending insert mid-loop, raising
-        # IntegrityError outside the try/except that's meant to catch it.
+        # after that add() would autoflush the pending insert, raising
+        # IntegrityError outside the savepoint that's meant to contain it.
         source_field_mappings = list(source.field_mappings)
 
         db_event_mapping = EventMapping(
@@ -148,23 +150,23 @@ class EventMappingRepository(SoftDeleteRepository[EventMapping]):
             default_tags=source.default_tags,
             created_by_id=created_by_id,
         )
-        self.db.add(db_event_mapping)
-        for field_mapping in source_field_mappings:
-            self.db.add(
-                EventFieldMapping(
-                    event_mapping_id=db_event_mapping.id,
-                    source_path=field_mapping.source_path,
-                    target_type=field_mapping.target_type,
-                    target_field=field_mapping.target_field,
-                    field_definition_id=field_mapping.field_definition_id,
-                    created_by_id=created_by_id,
-                )
-            )
-
         try:
-            self.db.commit()
+            # Savepoint so a duplicate event type rolls back only the clone.
+            with savepoint(self.db):
+                self.db.add(db_event_mapping)
+                for field_mapping in source_field_mappings:
+                    self.db.add(
+                        EventFieldMapping(
+                            event_mapping_id=db_event_mapping.id,
+                            source_path=field_mapping.source_path,
+                            target_type=field_mapping.target_type,
+                            target_field=field_mapping.target_field,
+                            field_definition_id=field_mapping.field_definition_id,
+                            created_by_id=created_by_id,
+                        )
+                    )
+                self.db.flush()
         except IntegrityError as e:
-            self.db.rollback()
             raise EventMappingConflictError(
                 f"Event type {event_type!r} is already registered"
             ) from e
@@ -186,5 +188,4 @@ class EventMappingRepository(SoftDeleteRepository[EventMapping]):
         now = datetime.now(timezone.utc)
         for child in children:
             child.deleted_at = now
-        self.db.commit()
         return True

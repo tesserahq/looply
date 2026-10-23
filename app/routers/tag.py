@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
 
-from app.db import get_db
+from app.db import DbSession
 from app.models.tag import Tag as TagModel
 from app.schemas.tag import Tag, TagCreateRequest, TagUpdate, TagUsage, TagWithCounts
 from app.repositories.tag_repository import TagConflictError, TagRepository
@@ -26,7 +25,7 @@ rbac = build_rbac_dependencies(resource=RESOURCE)
 @router.post("", response_model=Tag, status_code=status.HTTP_201_CREATED)
 def create_tag(
     tag_data: TagCreateRequest,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -39,7 +38,7 @@ def create_tag(
 
 @router.get("", response_model=Page[TagWithCounts])
 def list_tags(
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List all active tags with pagination, including each tag's current
@@ -69,8 +68,8 @@ def get_tag(
 
 @router.get("/{tag_id}/usage", response_model=TagUsage)
 def get_tag_usage(
+    db: DbSession,
     tag: TagModel = Depends(get_tag_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """A tag's full delete impact: assignment counts plus any saved segments
@@ -89,8 +88,8 @@ def get_tag_usage(
 @router.put("/{tag_id}", response_model=Tag)
 def update_tag(
     tag_data: TagUpdate,
+    db: DbSession,
     existing_tag: TagModel = Depends(get_tag_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Rename a tag."""
@@ -102,8 +101,8 @@ def update_tag(
 
 @router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tag(
+    db: DbSession,
     existing_tag: TagModel = Depends(get_tag_by_id),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["delete"]),
 ):
     """Delete a tag, removing it from every contact/campaign it's assigned to."""

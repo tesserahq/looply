@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
 from typing import Optional
 from uuid import UUID
 from fastapi_pagination import Page
 from fastapi_pagination import paginate as paginate_sequence
 from fastapi_pagination.ext.sqlalchemy import paginate
 
-from app.db import get_db
+from app.db import DbSession
 from app.schemas.contact import (
     Contact,
     ContactCreateRequest,
@@ -17,6 +16,9 @@ from app.schemas.contact import (
     ContactStatus,
     ContactStatusOption,
     CONTACT_STATUS_OPTIONS,
+    ContactBulkDeleteRequest,
+    ContactBulkResult,
+    ContactBulkUpdateRequest,
 )
 from app.repositories.contact_repository import ContactRepository
 from app.repositories.contact_list_repository import ContactListRepository
@@ -29,6 +31,12 @@ from app.commands.contact.update_contact_command import UpdateContactCommand
 from app.commands.contact.delete_contact_command import DeleteContactCommand
 from app.commands.contact.batch_create_contacts_command import (
     BatchCreateContactsCommand,
+)
+from app.commands.contact.bulk_update_contacts_command import (
+    BulkUpdateContactsCommand,
+)
+from app.commands.contact.bulk_delete_contacts_command import (
+    BulkDeleteContactsCommand,
 )
 
 router = APIRouter(
@@ -44,7 +52,7 @@ rbac = build_rbac_dependencies(resource=RESOURCE)
 @router.post("", response_model=Contact, status_code=status.HTTP_201_CREATED)
 def create_contact(
     contact_data: ContactCreateRequest,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -67,7 +75,7 @@ def create_contact(
 )
 def batch_create_contacts(
     contacts_data: list[ContactCreateRequest],
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -85,8 +93,37 @@ def batch_create_contacts(
         )
 
 
+@router.post("/bulk-update", response_model=ContactBulkResult)
+def bulk_update_contacts(
+    payload: ContactBulkUpdateRequest,
+    db: DbSession,
+    current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["update"]),
+):
+    """Set the same attributes and/or add tags on many contacts at once.
+    Unknown contact IDs are reported in `skipped`; the rest are updated."""
+    command = BulkUpdateContactsCommand(db)
+    return command.execute(
+        payload.contact_ids, payload.changes, payload.add_tags, current_user
+    )
+
+
+@router.post("/bulk-delete", response_model=ContactBulkResult)
+def bulk_delete_contacts(
+    payload: ContactBulkDeleteRequest,
+    db: DbSession,
+    current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["delete"]),
+):
+    """Soft delete many contacts at once. Unknown contact IDs are reported in
+    `skipped`; the rest are deleted."""
+    command = BulkDeleteContactsCommand(db)
+    return command.execute(payload.contact_ids, current_user)
+
+
 @router.get("", response_model=Page[Contact])
 def list_contacts(
+    db: DbSession,
     q: Optional[str] = Query(
         None, description="Free-text search term (PostgreSQL full-text search)."
     ),
@@ -103,7 +140,6 @@ def list_contacts(
         description="Comma-separated tag names. Returns contacts having at "
         "least one of them (OR semantics).",
     ),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List contacts with pagination, optionally narrowed by any combination
@@ -141,7 +177,7 @@ def list_contact_statuses(
 @router.get("/{contact_id}", response_model=ContactWithLists)
 def get_contact(
     contact_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get a contact by ID, including the contact lists it belongs to."""
@@ -161,7 +197,7 @@ def get_contact(
 def update_contact(
     contact_id: UUID,
     contact: ContactUpdate,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["update"]),
 ):
@@ -185,7 +221,7 @@ def update_contact(
 @router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_contact(
     contact_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["delete"]),
 ):

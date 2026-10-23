@@ -94,7 +94,7 @@ class WaitingListRepository(SoftDeleteRepository[WaitingList]):
         """
         db_waiting_list = WaitingList(**waiting_list.model_dump())
         self.db.add(db_waiting_list)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(db_waiting_list)
         return db_waiting_list
 
@@ -118,7 +118,7 @@ class WaitingListRepository(SoftDeleteRepository[WaitingList]):
             update_data = waiting_list.model_dump(exclude_unset=True)
             for key, value in update_data.items():
                 setattr(db_waiting_list, key, value)
-            self.db.commit()
+            self.db.flush()
             self.db.refresh(db_waiting_list)
         return db_waiting_list
 
@@ -221,7 +221,7 @@ class WaitingListRepository(SoftDeleteRepository[WaitingList]):
             status=status,
         )
         self.db.add(member)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(member)
         return member
 
@@ -251,7 +251,6 @@ class WaitingListRepository(SoftDeleteRepository[WaitingList]):
         from datetime import datetime, timezone
 
         member.deleted_at = datetime.now(timezone.utc)
-        self.db.commit()
         return True
 
     def update_member_status(
@@ -281,7 +280,7 @@ class WaitingListRepository(SoftDeleteRepository[WaitingList]):
             return None
 
         member.status = status
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(member)
         return member
 
@@ -433,7 +432,6 @@ class WaitingListRepository(SoftDeleteRepository[WaitingList]):
         for member in members:
             member.deleted_at = now
 
-        self.db.commit()
         return count
 
     def get_members_by_status(

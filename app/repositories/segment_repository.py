@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.db import savepoint
 from app.models.contact import Contact
 from app.models.segment import Segment
 from app.repositories.soft_delete_repository import SoftDeleteRepository
@@ -55,11 +56,12 @@ class SegmentRepository(SoftDeleteRepository[Segment]):
             rule=segment.rule.model_dump(mode="json"),
             created_by_id=segment.created_by_id,
         )
-        self.db.add(db_segment)
         try:
-            self.db.commit()
+            # Savepoint so a name conflict rolls back only this insert.
+            with savepoint(self.db):
+                self.db.add(db_segment)
+                self.db.flush()
         except IntegrityError as e:
-            self.db.rollback()
             raise SegmentNameConflictError(
                 f"A segment named {segment.name!r} already exists"
             ) from e
@@ -86,14 +88,16 @@ class SegmentRepository(SoftDeleteRepository[Segment]):
         if segment.rule is not None:
             validate_campaign_references(self.db, segment.rule.root)
             validate_custom_field_references(self.db, segment.rule.root)
-            db_segment.rule = segment.rule.model_dump(mode="json")
-        if segment.name is not None:
-            db_segment.name = segment.name
 
         try:
-            self.db.commit()
+            # Savepoint so a name conflict rolls back only this update.
+            with savepoint(self.db):
+                if segment.rule is not None:
+                    db_segment.rule = segment.rule.model_dump(mode="json")
+                if segment.name is not None:
+                    db_segment.name = segment.name
+                self.db.flush()
         except IntegrityError as e:
-            self.db.rollback()
             raise SegmentNameConflictError(
                 f"A segment named {segment.name!r} already exists"
             ) from e

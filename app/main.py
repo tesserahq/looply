@@ -28,7 +28,6 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from app.telemetry import setup_tracing
 from app.exceptions.handlers import register_exception_handlers
 from app.core.logging_config import get_logger
-from app.db import db_manager
 from prometheus_fastapi_instrumentator import Instrumentator
 
 SKIP_AUTH_PATHS = ["/livez", "/readyz", "/metrics"]
@@ -69,11 +68,10 @@ def create_app(testing: bool = False, auth_middleware=None) -> FastAPI:
         from tessera_sdk.server.middleware.user_onboarding import (
             UserOnboardingMiddleware,
         )
-        from tessera_sdk.infra.service_factory import create_service_factory
-        from app.repositories.user_repository import UserRepository
+        from app.services.sdk_user_service import create_sdk_user_service
 
-        # Create repository factory for UserRepository
-        user_service_factory = create_service_factory(UserRepository, db_manager)
+        # Each SDK call runs in its own managed session.
+        user_service_factory = create_sdk_user_service
 
         app.add_middleware(
             UserOnboardingMiddleware,

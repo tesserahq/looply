@@ -84,7 +84,7 @@ class EventFieldMappingRepository(SoftDeleteRepository[EventFieldMapping]):
             created_by_id=mapping.created_by_id,
         )
         self.db.add(db_mapping)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(db_mapping)
         return db_mapping
 
@@ -130,7 +130,7 @@ class EventFieldMappingRepository(SoftDeleteRepository[EventFieldMapping]):
             EventFieldMappingTargetType(db_mapping.target_type), db_mapping.target_field
         )
 
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(db_mapping)
         return db_mapping
 

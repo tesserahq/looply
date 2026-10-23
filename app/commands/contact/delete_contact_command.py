@@ -5,6 +5,7 @@ from typing import Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 
+from app.db import on_commit
 from app.models.contact import Contact
 from app.schemas.user import User
 from app.repositories.contact_repository import ContactRepository
@@ -44,30 +45,21 @@ class DeleteContactCommand:
         Raises:
             ValueError: If contact is not found
         """
-        try:
-            # Get contact before deletion for event publishing
-            contact = self.contact_repository.get_contact(contact_id)
-            if not contact:
-                raise ValueError("Contact not found")
+        # Get contact before deletion for event publishing
+        contact = self.contact_repository.get_contact(contact_id)
+        if not contact:
+            raise ValueError("Contact not found")
 
-            # Delete contact (soft delete)
-            deleted = self.contact_repository.delete_contact(contact_id)
+        # Delete contact (soft delete)
+        deleted = self.contact_repository.delete_contact(contact_id)
 
-            if not deleted:
-                raise ValueError(f"Failed to delete contact {contact_id}")
+        if not deleted:
+            raise ValueError(f"Failed to delete contact {contact_id}")
 
-            # Publish contact deleted event
-            self._publish_contact_deleted_event(contact, current_user.id)
+        # Publish contact deleted event
+        self._publish_contact_deleted_event(contact, current_user.id)
 
-            return deleted
-
-        except ValueError:
-            # Re-raise ValueError as-is (these are expected validation errors)
-            raise
-        except Exception as e:
-            # Rollback the transaction if something goes wrong
-            self.db.rollback()
-            raise Exception(f"Failed to delete contact: {str(e)}")
+        return deleted
 
     def _publish_contact_deleted_event(self, contact: Contact, user_id: UUID) -> None:
         """
@@ -79,7 +71,15 @@ class DeleteContactCommand:
         """
         event = build_contact_deleted_event(contact, user_id)
         if self.nats_publisher is not None:
-            try:
-                self.nats_publisher.publish_sync(event, event.event_type)
-            except Exception:  # pragma: no cover - defensive logging
-                self.logger.exception("Failed to publish contact-deleted event to NATS")
+            publisher = self.nats_publisher
+
+            def publish() -> None:
+                try:
+                    publisher.publish_sync(event, event.event_type)
+                except Exception:  # pragma: no cover - defensive logging
+                    self.logger.exception(
+                        "Failed to publish contact-deleted event to NATS"
+                    )
+
+            # Dispatch only after the transaction commits; dropped on rollback.
+            on_commit(publish)

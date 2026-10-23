@@ -5,6 +5,7 @@ from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 
+from app.db import on_commit
 from app.models.contact import Contact
 from app.models.waiting_list import WaitingList
 from app.models.waiting_list_member import WaitingListMember
@@ -103,9 +104,15 @@ class AddContactsByEmailToWaitingListCommand:
         """
         event = build_waiting_list_contact_added_event(waiting_list, contact, member)
         if self.nats_publisher is not None:
-            try:
-                self.nats_publisher.publish_sync(event, event.event_type)
-            except Exception:  # pragma: no cover - defensive logging
-                self.logger.exception(
-                    "Failed to publish waiting-list contact-added event to NATS"
-                )
+            publisher = self.nats_publisher
+
+            def publish() -> None:
+                try:
+                    publisher.publish_sync(event, event.event_type)
+                except Exception:  # pragma: no cover - defensive logging
+                    self.logger.exception(
+                        "Failed to publish waiting-list contact-added event to NATS"
+                    )
+
+            # Dispatch only after the transaction commits; dropped on rollback.
+            on_commit(publish)

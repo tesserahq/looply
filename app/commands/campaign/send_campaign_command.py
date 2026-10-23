@@ -27,15 +27,20 @@ _SEND_MAX_ATTEMPTS = 3
 _SEND_RETRY_DELAY_SECONDS = 1
 
 
+class CampaignSendError(Exception):
+    """Sendly did not accept the broadcast after retrying."""
+
+
 class SendCampaignCommand:
     """
     Command to send a draft campaign to its segment's resolved audience via Sendly.
 
     Resolves eligible recipients, calls SendlyClient.send_broadcast(), and
-    persists the resulting batch_id/status. This is the one place in the
-    codebase where the command deliberately commits a partial state change
-    (moving the campaign to 'failed') before re-raising, rather than only
-    rolling back — 'failed' is domain-meaningful persisted state per
+    persists the resulting batch_id/status. It is a multi-phase workflow with
+    allowlisted early commits: the read phase is committed before calling
+    Sendly so no database transaction is held open during the (retried)
+    network call, and on failure the move to 'failed' is committed before
+    re-raising, because 'failed' is domain-meaningful persisted state per
     docs/campaign.md, not a mid-transaction artifact.
     """
 
@@ -67,8 +72,10 @@ class SendCampaignCommand:
 
         Raises:
             ValueError: If the campaign is not found, not in 'draft' status,
-                has no template_id, or resolves to zero eligible recipients
-            Exception: If Sendly cannot accept the broadcast after retrying
+                is missing content required to send (html, layout_id,
+                subject, from_email), or resolves to zero eligible recipients
+            CampaignSendError: If Sendly cannot accept the broadcast after
+                retrying
         """
         campaign = self.campaign_repository.get_campaign(campaign_id)
         if not campaign:
@@ -80,8 +87,20 @@ class SendCampaignCommand:
                 f"(current status: {campaign.status})"
             )
 
-        if not campaign.template_id:
-            raise ValueError(f"Campaign {campaign_id} has no template_id to send")
+        # Checked up front, before resolving recipients or calling Sendly:
+        # Sendly would reject an inline send without these anyway, and that
+        # rejection would move the campaign to 'failed' instead of leaving it
+        # a fixable draft.
+        missing = [
+            field
+            for field in ("html", "layout_id", "subject", "from_email")
+            if not getattr(campaign, field)
+        ]
+        if missing:
+            raise ValueError(
+                f"Campaign {campaign_id} is missing content required to send: "
+                f"{', '.join(missing)}"
+            )
 
         segment = self.segment_repository.get_segment(campaign.segment_id)
         if not segment:
@@ -100,11 +119,15 @@ class SendCampaignCommand:
                 "(active, with an email address) in its segment"
             )
         recipients = [self._to_broadcast_recipient(contact) for contact in contacts]
+        recipient_contact_ids = [contact.id for contact in contacts]
         self.last_recipient_count = len(recipients)
 
+        # The campaign's own content goes inline; Sendly wraps it in the layout
+        # (frozen at accept) — no Sendly template is involved.
         request = SendBroadcastRequest(
             project_id=campaign.project_id,
-            template_id=campaign.template_id,
+            html=campaign.html,
+            layout_id=campaign.layout_id,
             template_variables=campaign.template_variables,
             from_email=campaign.from_email,
             subject=campaign.subject,
@@ -114,6 +137,11 @@ class SendCampaignCommand:
             recipients=recipients,
         )
 
+        # commit: recipients_resolved. Release the transaction before the
+        # Sendly call; the conditional mark_sending/mark_failed updates below
+        # still guard against a concurrent send.
+        self.db.commit()
+
         try:
             response = self._send_with_retry(request)
         except Exception as e:
@@ -121,12 +149,17 @@ class SendCampaignCommand:
             # already moved this campaign out of 'draft' — that's fine, this
             # request's own attempt still failed, so still re-raise.
             self.campaign_repository.mark_failed(campaign_id)
-            raise Exception(f"Failed to send campaign {campaign_id}: {str(e)}")
+            # commit: campaign_failed. Persist 'failed' before raising; the
+            # caller's rollback must not undo it.
+            self.db.commit()
+            raise CampaignSendError(
+                f"Failed to send campaign {campaign_id}: {str(e)}"
+            ) from e
 
         updated_campaign = self.campaign_repository.mark_sending(
             campaign_id,
             response.batch_id,
-            recipient_contact_ids=[contact.id for contact in contacts],
+            recipient_contact_ids=recipient_contact_ids,
         )
         if updated_campaign is None:
             # Sendly accepted this request's broadcast, but a concurrent

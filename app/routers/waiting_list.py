@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
 from uuid import UUID
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
 from typing import Dict, Any, Optional
 
-from app.db import get_db
+from app.db import DbSession
 from app.schemas.waiting_list import (
     WaitingList,
     WaitingListCreate,
@@ -53,7 +52,7 @@ def list_member_statuses(
 @router.post("", response_model=WaitingList, status_code=status.HTTP_201_CREATED)
 def create_waiting_list(
     waiting_list_data: WaitingListCreateRequest,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -69,7 +68,7 @@ def create_waiting_list(
 
 @router.get("", response_model=Page[WaitingList])
 def list_waiting_lists(
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List all waiting lists with pagination."""
@@ -80,7 +79,7 @@ def list_waiting_lists(
 @router.get("/{waiting_list_id}", response_model=WaitingList)
 def get_waiting_list(
     waiting_list_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get a waiting list by ID."""
@@ -96,7 +95,7 @@ def get_waiting_list(
 def update_waiting_list(
     waiting_list_id: UUID,
     waiting_list: WaitingListUpdate,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Update a waiting list."""
@@ -113,7 +112,7 @@ def update_waiting_list(
 @router.delete("/{waiting_list_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_waiting_list(
     waiting_list_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["delete"]),
 ):
     """Delete a waiting list."""
@@ -126,7 +125,7 @@ def delete_waiting_list(
 @router.post("/search")
 def search_waiting_lists(
     filters: Dict[str, Any],
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Search waiting lists based on dynamic filter criteria."""
@@ -142,7 +141,7 @@ def search_waiting_lists(
 def add_members_to_waiting_list(
     waiting_list_id: UUID,
     request: AddWaitingListMembersRequest,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     # Membership changes mutate the list, so they're gated the same as update.
     _authorized: bool = Depends(rbac["update"]),
@@ -189,7 +188,7 @@ def add_members_to_waiting_list(
 def remove_member_from_waiting_list(
     waiting_list_id: UUID,
     contact_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Remove a contact from a waiting list."""
@@ -207,8 +206,8 @@ def remove_member_from_waiting_list(
 @router.get("/{waiting_list_id}/members")
 def get_waiting_list_members(
     waiting_list_id: UUID,
+    db: DbSession,
     email: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get members of a waiting list with their details.
@@ -236,7 +235,7 @@ def get_waiting_list_members(
 )
 def get_waiting_list_member_count(
     waiting_list_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get the number of members in a waiting list."""
@@ -259,7 +258,7 @@ def update_member_status(
     waiting_list_id: UUID,
     contact_id: UUID,
     status: str,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Update the status of a member on a waiting list."""
@@ -285,7 +284,7 @@ def update_member_status(
 def get_members_by_status(
     waiting_list_id: UUID,
     status: str,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get all members with a specific status on a waiting list."""
@@ -311,7 +310,7 @@ def get_members_by_status(
 def get_member_count_by_status(
     waiting_list_id: UUID,
     status: str,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get the count of members with a specific status."""
@@ -338,7 +337,7 @@ def update_members_status_bulk(
     waiting_list_id: UUID,
     contact_ids: list[UUID],
     status: str,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Update the status of multiple members at once."""
@@ -365,7 +364,7 @@ def update_members_status_bulk(
 @router.delete("/{waiting_list_id}/members", status_code=status.HTTP_200_OK)
 def clear_waiting_list_members(
     waiting_list_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Clear all members from a waiting list."""
@@ -389,7 +388,7 @@ def clear_waiting_list_members(
 @router.get("/contacts/{contact_id}/waiting-lists", response_model=list[WaitingList])
 def get_waiting_lists_for_contact(
     contact_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get all waiting lists that a contact belongs to."""
@@ -412,7 +411,7 @@ def get_waiting_lists_for_contact(
 def check_contact_membership(
     waiting_list_id: UUID,
     contact_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Check if a contact is a member of a waiting list."""
@@ -438,7 +437,7 @@ def check_contact_membership(
 def get_member_status(
     waiting_list_id: UUID,
     contact_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get the status of a member on a waiting list."""

@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy import false
 from uuid import UUID
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import paginate
 from typing import Dict, Any
 
-from app.db import get_db
+from app.db import DbSession
 from app.schemas.contact import Contact as ContactSchema
 from app.schemas.contact_list import (
     ContactList,
@@ -39,7 +38,7 @@ rbac = build_rbac_dependencies(resource=RESOURCE)
 @router.post("", response_model=ContactList, status_code=status.HTTP_201_CREATED)
 def create_contact_list(
     contact_list_data: ContactListCreateRequest,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
     _authorized: bool = Depends(rbac["create"]),
 ):
@@ -55,7 +54,7 @@ def create_contact_list(
 
 @router.get("", response_model=Page[ContactList])
 def list_contact_lists(
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """List all contact lists with pagination."""
@@ -64,7 +63,7 @@ def list_contact_lists(
 
 
 @router.get("/public", response_model=Page[ContactList])
-def list_public_contact_lists(db: Session = Depends(get_db)):
+def list_public_contact_lists(db: DbSession):
     """List all public contact lists with pagination."""
     contact_list_repository = ContactListRepository(db)
     return paginate(db, contact_list_repository.get_public_contact_lists_query())
@@ -72,7 +71,7 @@ def list_public_contact_lists(db: Session = Depends(get_db)):
 
 @router.get("/subscriptions", response_model=Page[ContactListSubscription])
 def get_my_subscriptions(
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
 ):
     """Get all public contact lists that the current user is subscribed to."""
@@ -106,7 +105,7 @@ def get_my_subscriptions(
 @router.get("/{contact_list_id}", response_model=ContactList)
 def get_contact_list(
     contact_list_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get a contact list by ID."""
@@ -122,7 +121,7 @@ def get_contact_list(
 def update_contact_list(
     contact_list_id: UUID,
     contact_list: ContactListUpdate,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Update a contact list."""
@@ -139,7 +138,7 @@ def update_contact_list(
 @router.delete("/{contact_list_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_contact_list(
     contact_list_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["delete"]),
 ):
     """Delete a contact list."""
@@ -152,7 +151,7 @@ def delete_contact_list(
 @router.post("/search", response_model=list[ContactList])
 def search_contact_lists(
     filters: Dict[str, Any],
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Search contact lists based on dynamic filter criteria."""
@@ -168,7 +167,7 @@ def search_contact_lists(
 def add_members_to_list(
     contact_list_id: UUID,
     request: AddMembersRequest,
-    db: Session = Depends(get_db),
+    db: DbSession,
     # Membership changes mutate the list, so they're gated the same as update.
     _authorized: bool = Depends(rbac["update"]),
 ):
@@ -200,7 +199,7 @@ def add_members_to_list(
 def remove_member_from_list(
     contact_list_id: UUID,
     contact_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Remove a contact from a contact list."""
@@ -218,7 +217,7 @@ def remove_member_from_list(
 @router.get("/{contact_list_id}/members", response_model=Page[ContactSchema])
 def get_list_members(
     contact_list_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get all members of a contact list, paginated."""
@@ -237,7 +236,7 @@ def get_list_members(
 @router.get("/{contact_list_id}/members/count", response_model=MemberCountResponse)
 def get_list_member_count(
     contact_list_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get the number of members in a contact list."""
@@ -258,7 +257,7 @@ def get_list_member_count(
 @router.delete("/{contact_list_id}/members", status_code=status.HTTP_200_OK)
 def clear_list_members(
     contact_list_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["update"]),
 ):
     """Clear all members from a contact list."""
@@ -282,7 +281,7 @@ def clear_list_members(
 @router.get("/contacts/{contact_id}/contact-lists", response_model=list[ContactList])
 def get_contact_lists_for_contact(
     contact_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Get all contact lists that a contact belongs to."""
@@ -305,7 +304,7 @@ def get_contact_lists_for_contact(
 def check_contact_membership(
     contact_list_id: UUID,
     contact_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     _authorized: bool = Depends(rbac["read"]),
 ):
     """Check if a contact is a member of a contact list."""
@@ -337,7 +336,7 @@ def check_contact_membership(
 )
 def subscribe_to_public_list(
     contact_list_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
 ):
     """Subscribe a contact to a public contact list."""
@@ -379,7 +378,7 @@ def subscribe_to_public_list(
 )
 def unsubscribe_from_public_list(
     contact_list_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
     current_user: User = Depends(get_current_user),
 ):
     """Unsubscribe a contact from a public contact list."""

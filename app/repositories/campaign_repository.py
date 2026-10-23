@@ -1,7 +1,7 @@
 from typing import List, Optional, Sequence
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlalchemy.orm import Session, contains_eager
 from app.config import get_settings
 from app.models.campaign import Campaign
@@ -129,7 +129,7 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
         """
         db_campaign = Campaign(**campaign.model_dump(exclude={"tags"}))
         self.db.add(db_campaign)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(db_campaign)
         if campaign.tags:
             TagRepository(self.db).set_campaign_tags(
@@ -157,7 +157,7 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
             tags = update_data.pop("tags", None)
             for key, value in update_data.items():
                 setattr(db_campaign, key, value)
-            self.db.commit()
+            self.db.flush()
             if tags is not None:
                 TagRepository(self.db).set_campaign_tags(
                     campaign_id, tags, db_campaign.created_by_id
@@ -261,23 +261,19 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
             Optional[Campaign]: The updated campaign, or None if the campaign
                 was no longer 'draft' when this write was attempted
         """
-        updated_rows = (
-            self.db.query(Campaign)
-            .filter(
+        result = self._execute_mutation(
+            update(Campaign)
+            .where(
                 Campaign.id == campaign_id,
                 Campaign.status == CampaignStatus.DRAFT.value,
             )
-            .update(
-                {
-                    Campaign.status: CampaignStatus.SENDING.value,
-                    Campaign.batch_id: batch_id,
-                    Campaign.sent_at: datetime.now(timezone.utc),
-                },
-                synchronize_session=False,
+            .values(
+                status=CampaignStatus.SENDING.value,
+                batch_id=batch_id,
+                sent_at=datetime.now(timezone.utc),
             )
         )
-        if not updated_rows:
-            self.db.commit()
+        if not result.rowcount:
             return None
         if recipient_contact_ids:
             self.db.bulk_save_objects(
@@ -286,7 +282,6 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
                     for contact_id in recipient_contact_ids
                 ]
             )
-        self.db.commit()
         return self.get_campaign(campaign_id)
 
     def mark_completed(self, campaign_id: UUID, completed_at: datetime) -> Campaign:
@@ -310,7 +305,7 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
         db_campaign.engagement_polling_expires_at = completed_at + timedelta(
             days=get_settings().engagement_polling_window_days
         )
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(db_campaign)
         return db_campaign
 
@@ -361,19 +356,16 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
             opened_at: Earliest known open from this poll, if any
             clicked_at: Earliest known click from this poll, if any
         """
-        self.db.query(CampaignRecipient).filter(
-            CampaignRecipient.campaign_id == campaign_id,
-            CampaignRecipient.contact_id == contact_id,
-        ).update(
-            {
-                CampaignRecipient.opened_at: func.coalesce(
-                    CampaignRecipient.opened_at, opened_at
-                ),
-                CampaignRecipient.clicked_at: func.coalesce(
-                    CampaignRecipient.clicked_at, clicked_at
-                ),
-            },
-            synchronize_session=False,
+        self._execute_mutation(
+            update(CampaignRecipient)
+            .where(
+                CampaignRecipient.campaign_id == campaign_id,
+                CampaignRecipient.contact_id == contact_id,
+            )
+            .values(
+                opened_at=func.coalesce(CampaignRecipient.opened_at, opened_at),
+                clicked_at=func.coalesce(CampaignRecipient.clicked_at, clicked_at),
+            )
         )
 
     def update_campaign_engagement_counts(
@@ -402,16 +394,17 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
             clicked_count: Sendly's current clicked_count
             synced_at: When this successful poll pass completed
         """
-        self.db.query(Campaign).filter(Campaign.id == campaign_id).update(
-            {
-                Campaign.delivered_count: delivered_count,
-                Campaign.bounced_count: bounced_count,
-                Campaign.complained_count: complained_count,
-                Campaign.opened_count: opened_count,
-                Campaign.clicked_count: clicked_count,
-                Campaign.engagement_last_synced_at: synced_at,
-            },
-            synchronize_session=False,
+        self._execute_mutation(
+            update(Campaign)
+            .where(Campaign.id == campaign_id)
+            .values(
+                delivered_count=delivered_count,
+                bounced_count=bounced_count,
+                complained_count=complained_count,
+                opened_count=opened_count,
+                clicked_count=clicked_count,
+                engagement_last_synced_at=synced_at,
+            )
         )
 
     def get_recipient_count(self, campaign_id: UUID) -> int:
@@ -522,18 +515,14 @@ class CampaignRepository(SoftDeleteRepository[Campaign]):
             Optional[Campaign]: The updated campaign, or None if the campaign
                 was no longer 'draft' when this write was attempted
         """
-        updated_rows = (
-            self.db.query(Campaign)
-            .filter(
+        result = self._execute_mutation(
+            update(Campaign)
+            .where(
                 Campaign.id == campaign_id,
                 Campaign.status == CampaignStatus.DRAFT.value,
             )
-            .update(
-                {Campaign.status: CampaignStatus.FAILED.value},
-                synchronize_session=False,
-            )
+            .values(status=CampaignStatus.FAILED.value)
         )
-        self.db.commit()
-        if not updated_rows:
+        if not result.rowcount:
             return None
         return self.get_campaign(campaign_id)

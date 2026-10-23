@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
+from app.db import on_commit
 from app.models.contact_list import ContactList
 from app.models.contact import Contact
 from app.schemas.user import User
@@ -47,42 +48,34 @@ class UnsubscribeUserCommand:
             ValueError: If the contact list is not found
             ValueError: If the contact is not found
         """
-        try:
-            # Check if contact list exists
-            contact_list = self.contact_list_repository.get_contact_list(
-                contact_list_id
-            )
-            if not contact_list:
-                raise ValueError(f"Contact list {contact_list_id} not found")
+        # Check if contact list exists
+        contact_list = self.contact_list_repository.get_contact_list(contact_list_id)
+        if not contact_list:
+            raise ValueError(f"Contact list {contact_list_id} not found")
 
-            # Find contact by email
-            if not current_user.email:
-                raise ValueError("User email is required to unsubscribe")
+        # Find contact by email
+        if not current_user.email:
+            raise ValueError("User email is required to unsubscribe")
 
-            contact = self.contact_repository.get_contact_by_email(current_user.email)
-            if not contact:
-                raise ValueError(f"Contact with email {current_user.email} not found")
+        contact = self.contact_repository.get_contact_by_email(current_user.email)
+        if not contact:
+            raise ValueError(f"Contact with email {current_user.email} not found")
 
-            contact_id = contact.id
+        contact_id = contact.id
 
-            # Remove contact from list using the service method
-            removed = self.contact_list_repository.remove_contact_from_list(
-                contact_list_id, contact_id
-            )
+        # Remove contact from list using the service method
+        removed = self.contact_list_repository.remove_contact_from_list(
+            contact_list_id, contact_id
+        )
 
-            if not removed:
-                # Not subscribed, return False
-                return False
+        if not removed:
+            # Not subscribed, return False
+            return False
 
-            # Publish unsubscription event
-            self._publish_unsubscribed_event(contact_list, contact)
+        # Publish unsubscription event
+        self._publish_unsubscribed_event(contact_list, contact)
 
-            return True
-
-        except Exception as e:
-            # Rollback the transaction if something goes wrong
-            self.db.rollback()
-            raise Exception(f"Failed to unsubscribe from contact list: {str(e)}")
+        return True
 
     def _publish_unsubscribed_event(
         self, contact_list: ContactList, contact: Contact
@@ -96,9 +89,15 @@ class UnsubscribeUserCommand:
         """
         event = build_contact_unsubscribed_event(contact_list, contact)
         if self.nats_publisher is not None:
-            try:
-                self.nats_publisher.publish_sync(event, event.event_type)
-            except Exception:  # pragma: no cover - defensive logging
-                self.logger.exception(
-                    "Failed to publish contact-unsubscribed event to NATS"
-                )
+            publisher = self.nats_publisher
+
+            def publish() -> None:
+                try:
+                    publisher.publish_sync(event, event.event_type)
+                except Exception:  # pragma: no cover - defensive logging
+                    self.logger.exception(
+                        "Failed to publish contact-unsubscribed event to NATS"
+                    )
+
+            # Dispatch only after the transaction commits; dropped on rollback.
+            on_commit(publish)

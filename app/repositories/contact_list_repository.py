@@ -106,7 +106,7 @@ class ContactListRepository(SoftDeleteRepository[ContactList]):
         """
         db_contact_list = ContactList(**contact_list.model_dump())
         self.db.add(db_contact_list)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(db_contact_list)
         return db_contact_list
 
@@ -130,7 +130,7 @@ class ContactListRepository(SoftDeleteRepository[ContactList]):
             update_data = contact_list.model_dump(exclude_unset=True)
             for key, value in update_data.items():
                 setattr(db_contact_list, key, value)
-            self.db.commit()
+            self.db.flush()
             self.db.refresh(db_contact_list)
         return db_contact_list
 
@@ -242,7 +242,7 @@ class ContactListRepository(SoftDeleteRepository[ContactList]):
 
             soft_deleted_member.deleted_at = None
             soft_deleted_member.updated_at = datetime.now(timezone.utc)
-            self.db.commit()
+            self.db.flush()
             self.db.refresh(soft_deleted_member)
             return soft_deleted_member
 
@@ -251,7 +251,7 @@ class ContactListRepository(SoftDeleteRepository[ContactList]):
             contact_list_id=contact_list_id, contact_id=contact_id
         )
         self.db.add(member)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(member)
         return member
 
@@ -282,7 +282,6 @@ class ContactListRepository(SoftDeleteRepository[ContactList]):
         from datetime import datetime, timezone
 
         member.deleted_at = datetime.now(timezone.utc)
-        self.db.commit()
         return True
 
     def get_list_members(self, contact_list_id: UUID) -> List[Contact]:
@@ -486,5 +485,4 @@ class ContactListRepository(SoftDeleteRepository[ContactList]):
         for member in members:
             member.deleted_at = now
 
-        self.db.commit()
         return count

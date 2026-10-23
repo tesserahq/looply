@@ -1,4 +1,11 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
@@ -274,6 +281,144 @@ class ContactUpdate(BaseModel):
 
     source: Optional[str] = None
     """Updated provenance value."""
+
+
+MAX_BULK_CONTACTS = 500
+MAX_BULK_TAGS = 20
+
+
+class ContactBulkChanges(BaseModel):
+    """Attributes a bulk update may set on every selected contact. Only the fields
+    the caller sends are changed, and an explicit null clears a nullable field.
+    Keys not listed here (email, phone, external_id, tags, source) are rejected."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Optional[ContactStatus] = None
+    """Lifecycle status. Cannot be cleared."""
+
+    contact_type: Optional[ContactType] = None
+    """Contact type. Cannot be cleared."""
+
+    company: Optional[str] = None
+    """Company name."""
+
+    job: Optional[str] = None
+    """Job title."""
+
+    website: Optional[str] = None
+    """Website URL."""
+
+    address_line_1: Optional[str] = None
+    """First address line."""
+
+    address_line_2: Optional[str] = None
+    """Second address line."""
+
+    city: Optional[str] = None
+    """City."""
+
+    state: Optional[str] = None
+    """State or province."""
+
+    zip_code: Optional[str] = None
+    """Postal or ZIP code."""
+
+    country: Optional[str] = None
+    """Country."""
+
+    notes: Optional[str] = None
+    """Notes."""
+
+    @field_validator("status", "contact_type", mode="before")
+    @classmethod
+    def _reject_null_for_required(cls, value):
+        if value is None:
+            raise ValueError("cannot be cleared")
+        return value
+
+
+class ContactBulkIdsRequest(BaseModel):
+    """Shared selection for bulk endpoints."""
+
+    contact_ids: list[UUID] = Field(min_length=1)
+    """Contacts to act on. Duplicates are removed; at most 500 unique IDs."""
+
+    @field_validator("contact_ids")
+    @classmethod
+    def _dedupe_and_cap(cls, ids: list[UUID]) -> list[UUID]:
+        unique = list(dict.fromkeys(ids))
+        if len(unique) > MAX_BULK_CONTACTS:
+            raise ValueError(f"at most {MAX_BULK_CONTACTS} contact_ids allowed")
+        return unique
+
+
+class ContactBulkUpdateRequest(ContactBulkIdsRequest):
+    """Attribute changes and/or tags to add, applied to every selected contact."""
+
+    changes: Optional[ContactBulkChanges] = None
+    """Attribute values to set. See ContactBulkChanges."""
+
+    add_tags: Optional[list[str]] = None
+    """Tag names to add. Existing tags on each contact are kept."""
+
+    @field_validator("add_tags")
+    @classmethod
+    def _normalize_tags(cls, names: Optional[list[str]]) -> Optional[list[str]]:
+        if names is None:
+            return None
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for raw in names:
+            name = raw.strip()
+            if not name:
+                raise ValueError("tag names must not be blank")
+            if name.lower() in seen:
+                continue
+            seen.add(name.lower())
+            cleaned.append(name)
+        if not cleaned:
+            raise ValueError("add_tags must not be empty")
+        if len(cleaned) > MAX_BULK_TAGS:
+            raise ValueError(f"at most {MAX_BULK_TAGS} tags allowed")
+        return cleaned
+
+    @model_validator(mode="after")
+    def _require_a_change(self):
+        has_changes = self.changes is not None and bool(self.changes.model_fields_set)
+        if not has_changes and self.add_tags is None:
+            raise ValueError("provide at least one of 'changes' or 'add_tags'")
+        return self
+
+
+class ContactBulkDeleteRequest(ContactBulkIdsRequest):
+    """Contacts to soft delete."""
+
+
+class ContactBulkSkipReason(str, Enum):
+    """Why a contact in a bulk request wasn't processed."""
+
+    NOT_FOUND = "not_found"
+
+
+class ContactBulkSkip(BaseModel):
+    """One contact a bulk request didn't process."""
+
+    contact_id: UUID
+    reason: ContactBulkSkipReason
+
+
+class ContactBulkResult(BaseModel):
+    """Outcome of a bulk request."""
+
+    requested_count: int
+    """Number of unique contact IDs in the request."""
+
+    updated_count: int
+    """Number of contacts the operation was applied to."""
+
+    skipped: list[ContactBulkSkip] = Field(default_factory=list)
+    """Contacts that weren't processed, with the reason."""
 
 
 class ContactInDB(ContactBase):

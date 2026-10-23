@@ -207,6 +207,28 @@ class TagRepository(SoftDeleteRepository[Tag]):
         )
         return tags
 
+    def add_contact_tags(
+        self, contact_id: UUID, tag_names: List[str], created_by_id: Optional[UUID]
+    ) -> List[Tag]:
+        """Add `tag_names` to a contact, keeping the tags it already has.
+        Only missing assignments are inserted, so repeating an add is a no-op."""
+        tags = self.get_or_create_tags(tag_names, created_by_id)
+        assigned = {
+            tag_id
+            for (tag_id,) in self.db.query(ContactTag.tag_id).filter(
+                ContactTag.contact_id == contact_id
+            )
+        }
+        self.db.add_all(
+            [
+                ContactTag(contact_id=contact_id, tag_id=tag.id)
+                for tag in tags
+                if tag.id not in assigned
+            ]
+        )
+        self.db.flush()
+        return tags
+
     def get_contacts_by_tags_query(self, tag_names: List[str]):
         """Query for active contacts having at least one of `tag_names`
         (case-insensitive, OR semantics). Import-local to avoid a cycle with

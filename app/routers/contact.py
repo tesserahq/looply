@@ -16,6 +16,9 @@ from app.schemas.contact import (
     ContactStatus,
     ContactStatusOption,
     CONTACT_STATUS_OPTIONS,
+    ContactBulkDeleteRequest,
+    ContactBulkResult,
+    ContactBulkUpdateRequest,
 )
 from app.repositories.contact_repository import ContactRepository
 from app.repositories.contact_list_repository import ContactListRepository
@@ -28,6 +31,12 @@ from app.commands.contact.update_contact_command import UpdateContactCommand
 from app.commands.contact.delete_contact_command import DeleteContactCommand
 from app.commands.contact.batch_create_contacts_command import (
     BatchCreateContactsCommand,
+)
+from app.commands.contact.bulk_update_contacts_command import (
+    BulkUpdateContactsCommand,
+)
+from app.commands.contact.bulk_delete_contacts_command import (
+    BulkDeleteContactsCommand,
 )
 
 router = APIRouter(
@@ -82,6 +91,34 @@ def batch_create_contacts(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to batch create contacts: {str(e)}",
         )
+
+
+@router.post("/bulk-update", response_model=ContactBulkResult)
+def bulk_update_contacts(
+    payload: ContactBulkUpdateRequest,
+    db: DbSession,
+    current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["update"]),
+):
+    """Set the same attributes and/or add tags on many contacts at once.
+    Unknown contact IDs are reported in `skipped`; the rest are updated."""
+    command = BulkUpdateContactsCommand(db)
+    return command.execute(
+        payload.contact_ids, payload.changes, payload.add_tags, current_user
+    )
+
+
+@router.post("/bulk-delete", response_model=ContactBulkResult)
+def bulk_delete_contacts(
+    payload: ContactBulkDeleteRequest,
+    db: DbSession,
+    current_user: User = Depends(get_current_user),
+    _authorized: bool = Depends(rbac["delete"]),
+):
+    """Soft delete many contacts at once. Unknown contact IDs are reported in
+    `skipped`; the rest are deleted."""
+    command = BulkDeleteContactsCommand(db)
+    return command.execute(payload.contact_ids, current_user)
 
 
 @router.get("", response_model=Page[Contact])

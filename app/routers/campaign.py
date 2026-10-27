@@ -11,6 +11,8 @@ from app.schemas.campaign import (
     CampaignCreateRequest,
     CampaignUpdate,
     SendCampaignResponse,
+    TestSendCampaignRequest,
+    TestSendCampaignResponse,
 )
 from app.schemas.campaign_recipient import CampaignRecipient as CampaignRecipientSchema
 from app.schemas.campaign_stats import CampaignStats, CampaignEngagementTimeline
@@ -22,6 +24,10 @@ from tessera_sdk.server.dependencies.auth import get_current_user
 from app.auth.rbac import build_rbac_dependencies
 from app.commands.campaign.duplicate_campaign_command import DuplicateCampaignCommand
 from app.commands.campaign.send_campaign_command import SendCampaignCommand
+from app.commands.campaign.send_test_campaign_command import (
+    CampaignTestSendError,
+    SendTestCampaignCommand,
+)
 
 router = APIRouter(
     prefix="/campaigns",
@@ -31,6 +37,8 @@ router = APIRouter(
 
 RESOURCE = "campaign"
 rbac = build_rbac_dependencies(resource=RESOURCE)
+# The test send names a contact, so the caller must also be able to read contacts.
+contact_rbac = build_rbac_dependencies(resource="contact")
 
 
 @router.post("", response_model=Campaign, status_code=status.HTTP_201_CREATED)
@@ -190,4 +198,40 @@ def send_campaign(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to send campaign: {str(e)}",
+        )
+
+
+@router.post(
+    "/{campaign_id}/test-send",
+    response_model=TestSendCampaignResponse,
+    status_code=status.HTTP_200_OK,
+)
+def send_test_campaign(
+    payload: TestSendCampaignRequest,
+    db: DbSession,
+    campaign: CampaignModel = Depends(get_campaign_by_id),
+    # Sends a real email, so it's gated the same as sending a campaign.
+    _authorized: bool = Depends(rbac["update"]),
+    _contact_authorized: bool = Depends(contact_rbac["read"]),
+):
+    """Send one test email of a campaign to a single active contact. Nothing
+    is recorded on the campaign: it stays a draft and gets no recipients or
+    stats."""
+    try:
+        response = SendTestCampaignCommand(db).execute(campaign.id, payload.contact_id)
+
+        return TestSendCampaignResponse(
+            email_id=response.id,
+            to_email=response.to_email,
+            subject=response.subject,
+            status=response.status,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except CampaignTestSendError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send test email: {str(e)}",
         )

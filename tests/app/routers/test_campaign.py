@@ -1,10 +1,16 @@
 from uuid import uuid4
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from tessera_sdk.clients.sendly import SendBroadcastResponse
+from tessera_sdk.clients.sendly import (
+    CreateEmailResponse,
+    RenderResponse,
+    SendBroadcastResponse,
+)
 
 from app.constants.campaign import CampaignStatus
 from app.repositories.contact_list_repository import ContactListRepository
+from app.routers.campaign import contact_rbac
 
 
 def test_create_campaign(client_test_user: TestClient, faker, test_segment):
@@ -284,3 +290,123 @@ def test_duplicate_sent_campaign_gives_a_clean_draft(
 def test_duplicate_campaign_not_found(client_test_user: TestClient):
     response = client_test_user.post(f"/campaigns/{uuid4()}/duplicate")
     assert response.status_code == 404
+
+
+def _patch_test_send_sendly(monkeypatch, status="sent", error_message=None):
+    class FakeSendlyClient:
+        def render(self, request):
+            return RenderResponse(html=request.html, subject=request.subject)
+
+        def create_email(self, request):
+            return CreateEmailResponse(
+                from_email=str(request.from_email),
+                to_email=str(request.to[0]),
+                subject=request.subject,
+                body=request.html,
+                status=status,
+                provider="fake",
+                provider_message_id="msg-router-test",
+                id="email-router-test",
+                error_message=error_message,
+            )
+
+    monkeypatch.setattr(
+        "app.commands.campaign.send_test_campaign_command.build_sendly_client",
+        lambda: FakeSendlyClient(),
+    )
+
+
+def test_test_send_campaign_success(
+    client_test_user: TestClient, draft_campaign, test_contact, monkeypatch
+):
+    _patch_test_send_sendly(monkeypatch)
+
+    response = client_test_user.post(
+        f"/campaigns/{draft_campaign.id}/test-send",
+        json={"contact_id": str(test_contact.id)},
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data == {
+        "email_id": "email-router-test",
+        "to_email": test_contact.email,
+        "subject": f"[TEST] {draft_campaign.subject}",
+        "status": "sent",
+    }
+
+
+def test_test_send_campaign_not_found(
+    client_test_user: TestClient, test_contact, monkeypatch
+):
+    _patch_test_send_sendly(monkeypatch)
+
+    response = client_test_user.post(
+        f"/campaigns/{uuid4()}/test-send",
+        json={"contact_id": str(test_contact.id)},
+    )
+    assert response.status_code == 404
+
+
+def test_test_send_campaign_unknown_contact_returns_400(
+    client_test_user: TestClient, draft_campaign, monkeypatch
+):
+    _patch_test_send_sendly(monkeypatch)
+
+    response = client_test_user.post(
+        f"/campaigns/{draft_campaign.id}/test-send",
+        json={"contact_id": str(uuid4())},
+    )
+    assert response.status_code == 400
+    assert "not found" in response.json()["detail"]
+
+
+def test_test_send_campaign_not_draft_returns_400(
+    client_test_user: TestClient, sending_campaign, test_contact, monkeypatch
+):
+    _patch_test_send_sendly(monkeypatch)
+
+    response = client_test_user.post(
+        f"/campaigns/{sending_campaign.id}/test-send",
+        json={"contact_id": str(test_contact.id)},
+    )
+    assert response.status_code == 400
+
+
+def test_test_send_campaign_sendly_failure_returns_502(
+    client_test_user: TestClient, draft_campaign, test_contact, monkeypatch
+):
+    _patch_test_send_sendly(monkeypatch, status="failed", error_message="bounced")
+
+    response = client_test_user.post(
+        f"/campaigns/{draft_campaign.id}/test-send",
+        json={"contact_id": str(test_contact.id)},
+    )
+    assert response.status_code == 502
+    assert "bounced" in response.json()["detail"]
+
+
+def test_test_send_campaign_requires_contact_id(
+    client_test_user: TestClient, draft_campaign
+):
+    response = client_test_user.post(
+        f"/campaigns/{draft_campaign.id}/test-send", json={}
+    )
+    assert response.status_code == 422
+
+
+def test_test_send_campaign_requires_contact_read(
+    client_test_user: TestClient, draft_campaign, test_contact, monkeypatch
+):
+    _patch_test_send_sendly(monkeypatch)
+
+    def deny_contact_read():
+        raise HTTPException(status_code=403, detail="forbidden")
+
+    client_test_user.app.dependency_overrides[contact_rbac["read"]] = deny_contact_read
+
+    response = client_test_user.post(
+        f"/campaigns/{draft_campaign.id}/test-send",
+        json={"contact_id": str(test_contact.id)},
+    )
+    assert response.status_code == 403

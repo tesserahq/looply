@@ -31,6 +31,15 @@ class CampaignSendError(Exception):
     """Sendly did not accept the broadcast after retrying."""
 
 
+def missing_send_fields(campaign: Campaign) -> list[str]:
+    """Names of the content fields a campaign needs before it can be sent."""
+    return [
+        field
+        for field in ("html", "layout_id", "subject", "from_email")
+        if not getattr(campaign, field)
+    ]
+
+
 class SendCampaignCommand:
     """
     Command to send a draft campaign to its segment's resolved audience via Sendly.
@@ -91,11 +100,7 @@ class SendCampaignCommand:
         # Sendly would reject an inline send without these anyway, and that
         # rejection would move the campaign to 'failed' instead of leaving it
         # a fixable draft.
-        missing = [
-            field
-            for field in ("html", "layout_id", "subject", "from_email")
-            if not getattr(campaign, field)
-        ]
+        missing = missing_send_fields(campaign)
         if missing:
             raise ValueError(
                 f"Campaign {campaign_id} is missing content required to send: "

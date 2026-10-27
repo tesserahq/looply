@@ -195,3 +195,26 @@ class SendCampaignResponse(BaseModel):
 
     recipient_count: int
     """Number of eligible, deduplicated recipients the broadcast was sent to."""
+
+
+class TestSendCampaignRequest(BaseModel):
+    """Schema for the request body of the test-send campaign action."""
+
+    contact_id: UUID
+    """Contact to send the test email to. Must be an active contact with an email."""
+
+
+class TestSendCampaignResponse(BaseModel):
+    """Schema for the response returned by the test-send campaign action."""
+
+    email_id: str
+    """Sendly's identifier for the test email."""
+
+    to_email: str
+    """Address the test email was sent to."""
+
+    subject: str
+    """Rendered subject line, prefixed with [TEST]."""
+
+    status: str
+    """Status Sendly reported for the test email."""

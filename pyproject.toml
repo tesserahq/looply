@@ -39,6 +39,9 @@ python-jose = "^3.3.0"
 
 opentelemetry-instrumentation-fastapi = "^0.66b1"
 opentelemetry-exporter-otlp-proto-grpc = "^1.39.1"
+# The exporter only pulls in grpcio below Python 3.13, but its module imports grpc
+# unconditionally and the image runs Python 3.14, so depend on grpcio directly.
+grpcio = ">=1.75.1"
 opentelemetry-sdk = "^1.39.1"
 opentelemetry-instrumentation-sqlalchemy = "^0.66b1"
 opentelemetry-instrumentation-logging = "^0.66b1"

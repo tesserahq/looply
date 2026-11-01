@@ -23,25 +23,25 @@ nats_worker = "run_nats_worker:main"
 
 [tool.poetry.dependencies]
 python = ">=3.14,<3.15"
-fastapi = "^0.161.0"
+fastapi = "^0.162.0"
 python-dotenv = "^1.2.3"
 sqlalchemy = "^2.1.6"
 asyncpg = "^0.32.0"
 gunicorn = "^26.0.0"
 alembic = "^1.20.1"
-faker = "40.43.0"
+faker = "40.44.0"
 psycopg2-binary = "^2.9.10"
-pydantic = {extras = ["email"], version = "^2.14.1"}
+pydantic = {extras = ["email"], version = "^2.14.2"}
 black = "^26.10.1"
-ruff = "0.17.2"
-pydantic-settings = "^2.16.1"
+ruff = "0.17.3"
+pydantic-settings = "^2.16.2"
 python-jose = "^3.3.0"
 
 opentelemetry-instrumentation-fastapi = "^0.66b1"
 opentelemetry-exporter-otlp-proto-grpc = "^1.39.1"
 # The exporter only pulls in grpcio below Python 3.13, but its module imports grpc
 # unconditionally and the image runs Python 3.14, so depend on grpcio directly.
-grpcio = ">=1.75.1"
+grpcio = ">=1.85.0"
 opentelemetry-sdk = "^1.39.1"
 opentelemetry-instrumentation-sqlalchemy = "^0.66b1"
 opentelemetry-instrumentation-logging = "^0.66b1"
@@ -60,16 +60,16 @@ fastapi-pagination = "^0.16.1"
 # tessera-sdk = { path = "../tessera-sdk-py/", develop = true }
 tessera-sdk = { git = "https://github.com/tesserahq/tessera-sdk-py.git", branch = "main" }
 python-slugify = "^9.0.0"
-pytz = "^2026.5"
+pytz = "^2026.6"
 postmarker = "^1.0"
 mako = "^1.4.3"
 uvicorn = "0.54.0"
 faststream = {extras = ["nats"], version = "^0.7.8"}
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^9.0.0"
+pytest = "^9.2.0"
 httpx = "^0.28.0"  # Required by FastAPI TestClient
-pytest-asyncio = "^1.0.0"
+pytest-asyncio = "^1.4.1"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
